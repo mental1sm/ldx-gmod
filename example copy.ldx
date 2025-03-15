@@ -1,0 +1,9 @@
+local test = function()
+    print("Hello world!")
+end
+
+return (
+    <DFrame width={700} height={"500"}>
+        <DButton text={"Привет"} onClick={#test} />
+    </DFrame>
+)

@@ -1,0 +1,3 @@
+<DFrame width={700} height={500}>
+    <DButton width={PARENT:GetTall() * 0.5} text={"Привет"} onClick={function() print("Привет!") end} />
+</DFrame>
