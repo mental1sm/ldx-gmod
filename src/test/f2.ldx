@@ -1,0 +1,10 @@
+<DFrame id={root} width={700} height={500}>
+    <DButton 
+        width={$PARENT:GetTall() * 0.5} 
+        text={"Привет"} 
+        onClick={function() print("Привет!") end} 
+        paint={function(self) print(self) end}
+    />
+
+    <DLabel size={$PARENT:GetWidth() * 0.3, $PARENT:GetTall() * 0.5} text={"Простая текстовая метка"} />
+</DFrame>
