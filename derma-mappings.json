@@ -5,17 +5,17 @@
         "property"
     ],
     "baseMappings": {
-      "width": { "method": "SetWidth", "mapType": "classFunc", "alias": "a1" },
-      "height": { "method": "SetHeight", "mapType": "classFunc", "alias": "a2" },
-      "size": { "method": "SetSize", "mapType": "classFunc", "alias": "a3" },
-      "title": { "method": "SetTitle", "mapType": "classFunc", "alias": "a4" },
-      "text": { "method": "SetText", "mapType": "classFunc", "alias": "a5" },
-      "onClick": { "method": "DoClick", "mapType": "property", "alias": "a6" },
-      "paint": { "method": "Paint", "mapType": "property", "alias": "a7" }
+      "width": { "method": "SetWidth", "mapType": "classFunc" },
+      "height": { "method": "SetHeight", "mapType": "classFunc" },
+      "size": { "method": "SetSize", "mapType": "classFunc" },
+      "title": { "method": "SetTitle", "mapType": "classFunc" },
+      "text": { "method": "SetText", "mapType": "classFunc" },
+      "onClick": { "method": "DoClick", "mapType": "property" },
+      "paint": { "method": "Paint", "mapType": "property" }
     },
     "dermaMappings": {
-      "DFrame": ["width", "height", "size", "title", "text"],
+      "DFrame": ["width", "height", "size", "title", "text", "paint"],
       "DButton": ["width", "height", "size", "onClick", "text", "paint"],
-      "DLabel": ["width", "height", "size", "text"]
+      "DLabel": ["width", "height", "size", "text", "paint"]
     }
   }

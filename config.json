@@ -1,8 +1,9 @@
 {
     "varPrefix": "_e",
-    "aliasPrefix": "z",
+    "aliasPrefix": "_z",
     "generateAlias": true,
+    "minify": false,
     "outputDirectory": "./dist",
     "sourceDirectory": "./src",
-    "logLevel": "INFO" 
+    "logLevel": "WARN" 
 }
