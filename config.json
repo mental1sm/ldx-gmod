@@ -1,5 +1,5 @@
 {
-    "varPrefix": "_e",
+    "varPrefix": "_",
     "aliasPrefix": "_z",
     "generateAlias": true,
     "minify": false,

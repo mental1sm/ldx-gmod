@@ -10,7 +10,7 @@
     if (!usedAliases[method]) {
       const aliasName = config.aliasPrefix + aliasCounter++;
       usedAliases[method] = {
-        luaStr: `local ${aliasName} = function(_o, ...) return _o:${method}(...) end\n`,
+        luaStr: `local ${aliasName} = function(_, ...) return _:${method}(...) end\n`,
         alias: aliasName
       };
       console.log(`Created alias for ${method}: ${aliasName}`);
@@ -22,21 +22,38 @@
 }
 
 start
-  = lines:line* {
-    const code = lines.join('');
+  = blocks:(functionDef / line)* {
+    const code = blocks.join('');
     const aliasCode = Object.values(usedAliases).map(al => al.luaStr).join('');
     return aliasCode + code;
   }
 
-line
-  = methodCall:classMethodCall "\n" {
+functionDef
+  = "function" WS name:identifier "(" args:argumentString ")" WS body:functionBody "end" WS {
+    return `function ${name}(${args})\n${body}end\n`;
+  }
+
+functionBody
+  = lines:(methodCallLine / otherLine)* {
+    return lines.join('');
+  }
+
+methodCallLine
+  = WS methodCall:classMethodCall "\n" {
     if (methods.includes(methodCall.method)) {
       const alias = useAlias(methodCall.method);
-      return `${alias}(${methodCall.varName}, ${methodCall.args})\n`;
+      return `  ${alias}(${methodCall.varName}, ${methodCall.args})\n`;
     }
-    return methodCall.original + '\n';
+    return `  ${methodCall.original}\n`;
   }
-  / content:[^\n]* "\n" {
+
+otherLine
+  = WS content:[^\n]* "\n" {
+    return content.length ? `  ${content.join('')}\n` : '\n';
+  }
+
+line
+  = content:[^\n]* "\n" {
     return content.join('') + '\n';
   }
 
@@ -53,17 +70,10 @@ classMethodCall
 identifier
   = [a-zA-Z_][a-zA-Z0-9_]* { return text(); }
 
-quote
-  = "\""
-
 argumentString
   = chars:(nestedParens / [^()])* { return chars.join(''); }
 
-// Nested '()'
 nestedParens
   = "(" inner:(nestedParens / [^()])* ")" { return "(" + inner.join('') + ")"; }
 
-value
-  = chars:[^\n]+ { return chars.join(''); }
-
-WS "whitespace" = [ \t]*
+WS "whitespace" = [ \t\r\n]*

@@ -1,10 +1,28 @@
-<DFrame id={root} width={700} height={500}>
-    <DButton 
-        width={$PARENT:GetTall() * 0.5} 
-        text={"Привет"} 
-        onClick={function() print("Привет!") end} 
-        paint={function(self) print(self) end}
-    />
+{
+if SERVER then 
+    AddCSLuaFile() 
+    return   
+end
+}
 
-    <DLabel size={$PARENT:GetWidth() * 0.3, $PARENT:GetTall() * 0.5} text={"Простая текстовая метка"} />
-</DFrame>
+Component OpenTestMenu = {
+    <DFrame id={root} width={700} height={500}>
+        <DButton 
+            width={$PARENT:GetWide() * 0.5} 
+            text={"Привет"}
+            onClick={function() print("Привет!") end} 
+            paint={function(self) print("fdfwe") end}
+        />
+
+        <DLabel size={$PARENT:GetWide() * 0.3, $PARENT:GetTall() * 0.5} text={"Простая текстовая метка"} />
+        <DButton onClick={function(a) print(a) end}/>
+        <DFrame>INJECT(TestComponent)</DFrame>
+   
+    </DFrame>
+}
+
+Component TestComponent = {
+    <DFrame width={$PARENT:GetWide() * 0.5}>
+        <DButton width={$PARENT:GetWide() * 0.5} text={"Другой компонент"}/>
+    </DFrame>
+}

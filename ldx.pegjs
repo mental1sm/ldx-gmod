@@ -29,23 +29,7 @@
         ])
     );
 
-    let aliasCounter = 0;
-    const usedAliases = {
-        "someMethod": {luaStr: '', alias: '__z0'}
-    }
     const identifiedComponents = []
-    const useAlias = (method, type) => {
-        if (usedAliases[method]) return usedAliases[method];
-        if (type === types.classFunc) {
-            const aliasName = config.aliasPrefix + aliasCounter++;
-            usedAliases[method] = { luaStr: `local ${aliasName} = function(_o, ...) return _o:${method}(...) end\n`, alias: aliasName}
-        }
-        else if (type === types.func) {
-            const aliasName = config.aliasPrefix + aliasCounter++;
-            usedAliases[method] = { luaStr: `local ${aliasName} = function(_o, ...) return _o.${method}(...) end\n`, alias: aliasName }
-        }
-        return usedAliases[method]
-    };
     
     // Vars unique name generator
     let varCounter = 0;
@@ -59,7 +43,7 @@
         else varName = `${config.varPrefix}${varCounter++}`;
 
         //logger.debug(`Generating ${varName} with tag ${tag} and parent ${parentName}`)
-        let lua = `local ${varName} = vgui.Create("${tag}"${parentName ? ', ' + parentName : ''})\n`;
+        let lua = `local ${varName} = vgui.Create("${tag}"${parentName ? ', ' + parentName : ', PARENT'})\n`;
 
         const mappings = dermaMappings[tag] || {};
         //logger.debug('Detected mappings:\n' + mappings.toString())
@@ -72,23 +56,25 @@
             if (!mapping) return; // Prop does not supported in this component, so ignore it
 
             let processedVal = val;
-            if (parentName && typeof val === 'string' && val.includes('PARENT')) {
-                processedVal = val.replace(/\$PARENT/g, parentName);
+            if (parentName && typeof val === 'string' && val.includes('$PARENT')) {
+                processedVal = val.replace(/\$PARENT/g, parentName ? parentName : '');
             }
+            else if (val.includes('$PARENT')) processedVal = val.replace(/\$PARENT/g, 'PARENT');
 
-            if (mapping.alias && (mapping.mapType === types.classFunc || mapping.mapType === types.func) && config.generateAlias) {
-                const alias = useAlias(mapping.method, mapping.mapType).alias;
-                propsStr += `${alias}(${varName}, ${processedVal})\n`;
-            } else {
-                propsStr += mapping.mapType(varName, mapping.method, processedVal);
-            }
-            
+            propsStr += mapping.mapType(varName, mapping.method, processedVal);            
         });
 
         lua += propsStr;
 
         if (children.length) {
-            lua += children.map(child => makeElement(child.tag, child.props || [], child.children || [], varName)).join('');
+            lua += children.map(child => {
+                if (child.type === "inject") {
+
+                    return `${child.name}(${child.arg}, ${varName})\n`;
+                }
+                return makeElement(child.tag, child.props || [], child.children || [], varName)
+                }
+                ).join('');
         }
         return lua;
     }
@@ -96,15 +82,37 @@
 
 // File start
 start
-    = WS elements:element* WS {
-            const code = elements.map(elem => makeElement(elem.tag, elem.props, elem.children)).join('');
-            const aliasCode = Object.values(usedAliases).map(al => al.luaStr).join('');
-            return aliasCode + code;
-        }
+    = WS components:( (componentDef / externalCodeDef) WS )* {
+        return components.map(c => c[0].code).join('\n\n');
+    }
+
+componentDef
+    = externalCode:(externalCode WS)? "Component" WS name:[A-Za-z]+ WS "=" WS "{" WS elements:element* WS "}" {
+        const external = externalCode ? externalCode[0] + "\n\n" : "";
+        const code = `function ${name.join('')}(LDX_INPUT_ARGS, PARENT)\n` + 
+                    elements.map(elem => makeElement(elem.tag, elem.props, elem.children)).join('') + 
+                    "end";
+        return { code: external + code };
+    }
+
+externalCodeDef
+    = code:externalCode {
+        return { code: code };
+    }
+
+externalCode
+    = "{" val:[^}]* "}" { return val.join(''); }
+
 
 element 
-    = "<" tag:tagName props:prop* ">" WS children:(WS element)* WS "</" tagName ">"
-    { return { tag: tag, props: Object.fromEntries(props), children: children.map(c => c[1]) }; } // Removing WS and taking element only
+    = "<" tag:tagName props:prop* ">" WS children:(WS (element / inject))* WS "</" tagName ">"
+    { 
+        return { 
+            tag: tag, 
+            props: Object.fromEntries(props), 
+            children: children.map(c => c[1]) 
+        }; 
+    }
     / "<" tag:tagName props:prop* WS "/>"
     { return { tag: tag, props: Object.fromEntries(props), children: [] }; }
 
@@ -119,3 +127,8 @@ value
     / "{" val:[^}]* "}" { return val.join(''); }
 
 WS "whitespace" = [ \t\r\n]*
+
+
+inject
+    = "INJECT(" WS name:[A-Za-z]+ WS ")"
+    { return { type: "inject", name: name.join(""), arg: "LDX_INPUT_ARGS" }; }

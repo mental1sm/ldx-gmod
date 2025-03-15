@@ -1,9 +1,9 @@
 const fs = require('fs');
 const path = require('path');
 const peggy = require('peggy');
-const logger = require('./logger')
-const scanner = require('./scanner')
-const minify = require('./minify')
+const logger = require('./util/logger')
+const scanner = require('./util/scanner')
+const minify = require('./util/minify')
 
 const config = JSON.parse(fs.readFileSync('config.json', 'utf8'));
 const grammar = fs.readFileSync('ldx.pegjs', 'utf8')
@@ -36,7 +36,11 @@ async function parseLDX(inputFile) {
         logger.info(`Generated ${outputFile}`);
     } 
     catch (e) {
-        logger.warn(`Failed to parse ${inputFile}: ${e.message}`);
+        logger.warn(`Failed to parse ${inputFile}: ${e}`);
+       // const ldxContent = await fs.promises.readFile(inputFile, 'utf8');
+        //let result;
+        //result = parser.parse(ldxContent);
+        //result = minify.minifyLua(result);
     }
 }
 
