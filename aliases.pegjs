@@ -4,40 +4,28 @@
   const mappingConfig = JSON.parse(fs.readFileSync('derma-mappings.json', 'utf8'));
 
   const usedAliases = {};
-  let aliasCounter = 0;
+  let aliasCounter = 1; // Start with 1
 
-  function useAlias(method) { // (:)
+  function registerAlias(method, isDot) {
     if (!usedAliases[method]) {
-      const aliasName = config.aliasPrefix + aliasCounter++;
+      const aliasIndex = aliasCounter++;
       usedAliases[method] = {
-        luaStr: `local ${aliasName} = function(_, ...) return _:${method}(...) end\n`,
-        alias: aliasName
+        luaStr: `${config.aliasPrefix}[${aliasIndex}] = function(_, ...) return _${isDot ? '.' : ':'}${method}(...) end\n`,
+        alias: aliasIndex
       };
-      console.log(`[useAlias] Created alias for ${method}: ${aliasName}`);
-    }
-    return usedAliases[method].alias;
-  }
-
-  function useDotAlias(method) { // (.)
-    if (!usedAliases[method]) {
-      const aliasName = config.aliasPrefix + aliasCounter++;
-      usedAliases[method] = {
-        luaStr: `local ${aliasName} = function(_, ...) return _.${method}(...) end\n`,
-        alias: aliasName
-      };
-      console.log(`[useDotAlias] Created alias for ${method}: ${aliasName}`);
+      console.log(`[registerAlias] Created alias for ${method}: ${config.aliasPrefix}[${aliasIndex}]`);
     }
     return usedAliases[method].alias;
   }
 
   function useVguiCreateAlias() {
     if (!usedAliases['vgui.Create']) {
-      const aliasName = config.aliasPrefix + aliasCounter++;
+      const aliasIndex = aliasCounter++;
       usedAliases['vgui.Create'] = {
-        luaStr: `local ${aliasName} = vgui.Create\n`,
-        alias: aliasName
+        luaStr: `${config.aliasPrefix}[${aliasIndex}] = vgui.Create\n`,
+        alias: aliasIndex
       };
-      console.log(`[useVguiCreateAlias] Created alias for vgui.Create: ${aliasName}`);
+      console.log(`[useVguiCreateAlias] Created alias for vgui.Create: ${config.aliasPrefix}[${aliasIndex}]`);
     }
     return usedAliases['vgui.Create'].alias;
   }
@@ -47,42 +35,52 @@
 }
 
 start
-  = blocks:(functionDef / vguiCreateLine / methodCallLine / dotMethodCallLine / otherLine)* WS {
-    const code = blocks.join('');
-    const aliasCode = Object.values(usedAliases).map(al => al.luaStr).join('');
-    return aliasCode + code;
+  = blocks:(functionDef / forLoop / vguiCreateLine / vguiCreateAssign / methodCallLine / dotMethodCallLine / otherLine)* WS {
+    const aliasCode = `local ${config.aliasPrefix} = {}\n` + Object.values(usedAliases).map(al => al.luaStr).join('');
+    return aliasCode + blocks.join('');
   }
 
 functionDef
-  = "function" WS name:identifier "(" args:argumentString ")" WS lines:(vguiCreateLine / methodCallLine / dotMethodCallLine / otherLine)* "end" WS? {
+  = "function" WS name:identifier "(" args:argumentString ")" WS lines:(forLoop / vguiCreateLine / vguiCreateAssign / methodCallLine / dotMethodCallLine / otherLine)* "end" WS? {
     return `function ${name}(${args})\n${lines.join('')}end\n`;
   }
 
+forLoop
+  = WS "for" WS key:identifier "," WS value:identifier WS "in" WS "pairs(" array:identifier ")" WS "do" WS body:(vguiCreateLine / vguiCreateAssign / methodCallLine / dotMethodCallLine / otherLine)* "end" WS? {
+    return `for ${key}, ${value} in pairs(${array}) do\n${body.join('')}end\n`;
+  }
+
 vguiCreateLine
-  = WS "local" WS varName:identifier WS "=" WS "vgui.Create" "(" type:quotedString "," WS parent:identifier ")" "\n" {
+  = WS "local" WS varName:varExpression WS "=" WS "vgui.Create" "(" type:quotedString "," WS parent:identifier ")" "\n" {
     const alias = useVguiCreateAlias();
-    return `  local ${varName} = ${alias}(${type}, ${parent})\n`;
+    return `local ${varName} = ${config.aliasPrefix}[${alias}](${type}, ${parent})\n`;
+  }
+
+vguiCreateAssign
+  = WS varName:varExpression WS "=" WS "vgui.Create" "(" type:quotedString "," WS parent:identifier ")" "\n" {
+    const alias = useVguiCreateAlias();
+    return `${varName} = ${config.aliasPrefix}[${alias}](${type}, ${parent})\n`;
   }
 
 methodCallLine
   = WS methodCall:classMethodCall "\n" {
-    const alias = useAlias(methodCall.method);
-    return `  ${alias}(${methodCall.varName}${methodCall.args.length ? ', ' + methodCall.args : ''})\n`;
+    const alias = registerAlias(methodCall.method, false);
+    return `${config.aliasPrefix}[${alias}](${methodCall.varName}${methodCall.args.length ? ', ' + methodCall.args : ''})\n`;
   }
 
 dotMethodCallLine
   = WS methodCall:dotMethodCall "\n" {
-    const alias = useDotAlias(methodCall.method);
-    return `  ${alias}(${methodCall.varName}${methodCall.args.length ? ', ' + methodCall.args : ''})\n`;
+    const alias = registerAlias(methodCall.method, true);
+    return `${config.aliasPrefix}[${alias}](${methodCall.varName}${methodCall.args.length ? ', ' + methodCall.args : ''})\n`;
   }
 
 otherLine
   = WS content:[^\n]* "\n" {
-    return content.length ? `  ${content.join('')}\n` : '\n';
+    return content.length ? `${content.join('')}\n` : '\n';
   }
 
 classMethodCall
-  = varName:identifier ":" method:identifier "(" args:argumentString ")" {
+  = varName:varExpression ":" method:identifier "(" args:argumentString ")" {
     return {
       varName: varName,
       method: method,
@@ -92,13 +90,18 @@ classMethodCall
   }
 
 dotMethodCall
-  = varName:identifier "." method:identifier "(" args:argumentString ")" {
+  = varName:varExpression "." method:identifier "(" args:argumentString ")" {
     return {
       varName: varName,
       method: method,
       args: args,
       original: `${varName}.${method}(${args})`
     };
+  }
+
+varExpression
+  = base:identifier index:("[" idx:identifier "]")? {
+    return index ? `${base}[${index[1]}]` : base;
   }
 
 identifier
@@ -110,19 +113,19 @@ argumentString
   }
 
 methodCallArg
-  = varName:identifier ":" method:identifier "(" innerArgs:argumentString ")" {
+  = varName:varExpression ":" method:identifier "(" innerArgs:argumentString ")" {
     if (methods.includes(method)) {
-      const alias = useAlias(method);
-      return `${alias}(${varName}${innerArgs.length ? ', ' + innerArgs : ''})`;
+      const alias = registerAlias(method, false);
+      return `${config.aliasPrefix}[${alias}](${varName}${innerArgs.length ? ', ' + innerArgs : ''})`;
     }
     return `${varName}:${method}(${innerArgs})`;
   }
 
 dotMethodCallArg
-  = varName:identifier "." method:identifier "(" innerArgs:argumentString ")" {
+  = varName:varExpression "." method:identifier "(" innerArgs:argumentString ")" {
     if (methods.includes(method)) {
-      const alias = useDotAlias(method);
-      return `${alias}(${varName}${innerArgs.length ? ', ' + innerArgs : ''})`;
+      const alias = registerAlias(method, true);
+      return `${config.aliasPrefix}[${alias}](${varName}${innerArgs.length ? ', ' + innerArgs : ''})`;
     }
     return `${varName}.${method}(${innerArgs})`;
   }

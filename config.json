@@ -1,10 +1,11 @@
 {
     "varPrefix": "_",
     "aliasPrefix": "_z",
-    "indexVar": "_",
+    "indexVar": "__",
     "itemVar": "_i",
-    "generateAlias": true,
+    "generateAlias": false,
     "minify": false,
+    "rename": true,
     "outputDirectory": "./dist",
     "sourceDirectory": "./src",
     "logLevel": "WARN" 

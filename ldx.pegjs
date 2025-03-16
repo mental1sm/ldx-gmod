@@ -1,90 +1,143 @@
 {   
     const fs = require('fs');
-    //const logger = require('./logger')
+    // const logger = require('./logger');
 
-    // Loads config
-    const config = JSON.parse(fs.readFileSync('config.json', 'utf8'))
-    // Loads mapping config
-    const mappingConfig = JSON.parse(fs.readFileSync('derma-mappings.json', 'utf8'))
+    // === Configuration Loading ===
+    const config = JSON.parse(fs.readFileSync('config.json', 'utf8'));
+    const mappingConfig = JSON.parse(fs.readFileSync('derma-mappings.json', 'utf8'));
 
-
+    // === Lua Generation Types ===
     const types = {
-        func: (vrn, method, val) => `${vrn}.${method}(${val})\n`,
-        classFunc: (vrn, method, val) => `${vrn}:${method}(${val})\n`,
-        property: (vrn, method, val) => `${vrn}.${method} = (${val})\n`
+        func: (varName, method, value) => `${varName}.${method}(${value || ''})\n`,
+        classFunc: (varName, method, value) => `${varName}:${method}(${value || ''})\n`,
+        property: (varName, method, value) => `${varName}.${method} = ${value.replace(/^\s+|\s+$/g, '')}\n`, // trim spaces at the start & end of value
     };
 
-
+    // === Mapping Setup ===
     const baseMappings = Object.fromEntries(
         Object.entries(mappingConfig.baseMappings).map(([key, val]) => [
-        key,
-        { ...val, mapType: types[val.mapType] }
+            key,
+            { ...val, mapType: types[val.mapType] },
         ])
     );
 
     const dermaMappings = Object.fromEntries(
         Object.entries(mappingConfig.dermaMappings).map(([tag, propNames]) => [
-        tag,
-        Object.fromEntries(propNames.map(name => [name, baseMappings[name]]))
+            tag,
+            Object.fromEntries(propNames.map(name => [name, baseMappings[name]])),
         ])
     );
 
-    const identifiedComponents = []
+    // === Global State ===
+    const identifiedComponents = [];
+    let varCounter = 0;
 
-    function replaceParrentAlias(value, parentName) {
-        let processedVal = value;
-        if (parentName && typeof value === 'string' && value.includes('$PARENT')) {
-            processedVal = value.replace(/\$PARENT/g, parentName ? parentName : '');
+    // === Utility Functions ===
+    function replaceParentAlias(value, parentName) {
+        let processedValue = value;
+        if (!value) return;
+        if (parentName && value.includes('$PARENT')) {
+            processedValue = value.replace(/\$PARENT/g, parentName || '');
+        } 
+        else if (value.includes('$PARENT')) {
+            processedValue = value.replace(/\$PARENT/g, 'PARENT');
         }
-        else if (value.includes('$PARENT')) processedVal = value.replace(/\$PARENT/g, 'PARENT');
-        return processedVal
+        return processedValue;
     }
 
     function processType(element, parentName = null) {
         console.log(element);
-        if (element.type === "if") {
+
+        if (element.type === 'if') {
             let lua = `if ${element.condition} then\n`;
             lua += element.children.map(child => processType(child, parentName)).join('');
-            lua += "end\n";
+            lua += 'end\n';
             console.log(lua);
             return lua;
-        } else if (element.type === "map") {
-            let lua = `for ${config.indexVar || 'i'}, ${config.itemVar || 'item'} in pairs(${element.iterable}) do\n`;
-            lua += element.children.map(child => {
-                let childCode = processType(child, parentName);
-                return childCode
-                    .replace(/\$INDEX/g, config.indexVar || 'i')
-                    .replace(/\$ITEM/g, config.itemVar || 'item');
-            }).join('');
-            lua += "end\n";
+        }
+
+        if (element.type === 'map') {
+            let lua;
+            const mapTableName = `${config.varPrefix}${varCounter++}`;
+            lua = `local ${mapTableName} = {}\n` ;
+            lua += `for ${config.indexVar || 'i'}, ${config.itemVar || 'item'} in pairs(${element.iterable}) do\n`;
+            lua += element.children
+                .map(child => {
+                    child.customVarName = `${mapTableName}[$INDEX]`
+                    child.notGenerateVariable = true
+                    const childCode = processType(child, parentName);
+                    return childCode
+                        .replace(/\$INDEX/g, config.indexVar || `i`)
+                        .replace(/\$ITEM/g, config.itemVar || 'item');
+                })
+                .join('');
+            lua += 'end\n';
             return lua;
-        } else if (element.type === "inline") {
-            const code = replaceParrentAlias(element.code, parentName);
-            return code + "\n";
-        } else if (element.type === "inject") {
+        }
+
+        if (element.type === 'inline') {
+            const code = replaceParentAlias(element.code, parentName);
+            return `${code}\n`;
+        }
+
+        if (element.type === 'inject') {
             return `${element.name}(${element.arg}, ${parentName || 'PARENT'})\n`;
         }
 
         return makeElement(element, parentName);
     }
 
-    let varCounter = 0;
+    function processSubscriptions(element, code, varname) {
+        if (element.subscriptions && element.subscriptions.length > 0) {
+            code += `${varName}.UpdateProps = function(self)\n`;
+
+
+        }
+    }
+
     function makeElement(element, parentName = null) {
-        let varName = element.props.id && typeof(element.props.id) === 'string'
-            ? element.props.id.replaceAll('\"', '')
+        let varName = element.props.id && typeof(element.props.id) === 'string' || element.customVarName
+            ? element.customVarName || element.props.id.replaceAll('\"', '')
             : `${config.varPrefix}${varCounter++}`;
         identifiedComponents[varName] = element.props;
 
-        let lua = `local ${varName} = vgui.Create("${element.tag}"${parentName ? ', ' + parentName : ', PARENT'})\n`;
+        let lua;
+        element.notGenerateVariable ? 
+            lua = `${varName} = vgui.Create("${element.tag}"${parentName ? ', ' + parentName : ', PARENT'})\n`
+            :
+            lua = `local ${varName} = vgui.Create("${element.tag}"${parentName ? ', ' + parentName : ', PARENT'})\n`;
+
         const mappings = dermaMappings[element.tag] || {};
         let propsStr = '';
 
-        Object.entries(element.props || {}).forEach(([key, val]) => {
-            const mapping = mappings[key];
-            if (!mapping) return;
-            let processedVal = replaceParrentAlias(val, parentName);
-            propsStr += mapping.mapType(varName, mapping.method, processedVal);
-        });
+        // Добавляем функцию UpdateProps для подписчиков
+        if (element.subscriptions && element.subscriptions.length > 0) {
+            propsStr += `${varName}.__Update__ = function(self)\n`;
+            Object.entries(element.props || {}).forEach(([key, val]) => {
+                const mapping = mappings[key];
+                if (!mapping) return;
+                let processedVal = replaceParentAlias(val, parentName);
+                propsStr += mapping.mapType("self", mapping.method, processedVal);
+            });
+            propsStr += `self:InvalidateChildren(true)\n`;
+            propsStr += `end\n`;
+            propsStr += `${varName}:__Update__()\n`;
+            // Подписываем элемент на все указанные состояния
+            element.subscriptions.forEach(stateName => {
+                propsStr += `${stateName}.subscribe(${varName})\n`;
+            });
+        } else {
+            // Обычная обработка свойств для элементов без подписки
+            Object.entries(element.props || {}).forEach(([key, val]) => {
+                const mapping = mappings[key];
+                if (!mapping) return;
+                let processedVal = replaceParentAlias(val, parentName);
+                propsStr += mapping.mapType(varName, mapping.method, processedVal);
+            });
+        }
+
+
+        //
 
         lua += propsStr;
 
@@ -93,7 +146,7 @@
                 if (child.type === "inject") {
                     return `${child.name}(${child.arg}, ${varName})\n`;
                 } else if (child.type === "inline") {
-                    const code = replaceParrentAlias(child.code, varName);
+                    const code = replaceParentAlias(child.code, varName);
                     return code + "\n";
                 }
                 return processType(child, varName);
@@ -124,22 +177,26 @@ externalCodeDef
     }
 
 externalCode
-    = "{" val:[^}]* "}" { return val.join(''); }
+    = "{" WS content:nestedCurly WS "}" { return content; }
 
 element 
-    = "<" tag:tagName props:prop* ">" WS children:(WS (element / inject / inlineCode / ifBlock / mapBlock))* WS "</" tagName ">"
+    = "<" tag:tagName subscriptions:subscription* props:prop* ">" WS children:(WS (element / inject / inlineCode / ifBlock / mapBlock))* WS "</" tagName ">"
     { 
         return { 
-            tag: tag, 
+            tag: tag,
+            subscriptions: subscriptions.map(s => s[1]), 
             props: Object.fromEntries(props), 
             children: children.map(c => c[1]) 
         }; 
     }
-    / "<" tag:tagName props:prop* WS "/>"
-    { return { tag: tag, props: Object.fromEntries(props), children: [] }; }
+    / "<" tag:tagName subscriptions:subscription* props:prop* WS "/>"
+    { return { tag: tag, props: Object.fromEntries(props), children: [], subscriptions: subscriptions.map(s => s[1]) }; }
     / inlineCode
     / ifBlock
     / mapBlock
+
+subscription
+    = WS "@" name:[a-zA-Z]+ { return ["@", name.join('')]; }
 
 inlineCode
     = "{" WS content:nestedCurly WS "}" { return { type: "inline", code: content }; }
@@ -158,6 +215,7 @@ tagName
 
 prop 
     = WS name:[a-zA-Z]+ "=" value:value { return [name.join(''), value]; }
+    / WS name:[a-zA-Z]+ { return [name.join(''), null]; }
 
 value
     = "\"" val:[^\"]* "\"" { return val.join(''); }

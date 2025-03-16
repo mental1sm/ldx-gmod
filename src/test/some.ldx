@@ -1,0 +1,28 @@
+{
+include('use-state.lua')
+if SERVER then 
+    AddCSLuaFile() 
+end
+local iconBtnSize = {16, 16}
+}
+
+Component TestMenu = {
+    <DFrame
+        id={"root"} size={ScrW(), ScrH()} popup
+        pos={0, 0} title={""} draggable={false}
+        paint={
+            function(self, w, h)
+                Derma_DrawBackgroundBlur(self, self.startTime)
+                draw.RoundedBox(0,0,0, w, h, Color(30,30,30,110))
+            end
+        }>
+            {root.startTime = SysTime()}
+            <DImageButton pos={ScrW() - 30, 10} size={iconBtnSize[0], iconBtnSize[1]}
+                image={"icon16/cross.png"} onClick={function() root:Close() end} />
+            
+    </DFrame>
+
+}
+{
+    concommand.Add("open_ui2", function() TestMenu() end)
+}

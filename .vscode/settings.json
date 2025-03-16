@@ -23,5 +23,5 @@
 	    "//"
     ],
     "Lua.runtime.version": "Lua 5.1",
-    "ldx.enableLuaCompletion": false
+    "ldx.enableLuaCompletion": true
 }

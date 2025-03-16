@@ -1,36 +1,38 @@
 {
+include('use-state.lua')
 if SERVER then 
     AddCSLuaFile() 
-    local function test(a)
-        print(a)
-    end
-    local b = test(1488)
-    return
 end
 }
 
 Component OpenTestMenu = {
     <DFrame width={700} height={500}>
-        {local a = 1488}
+        {local counter = useState(0)}
+        {local time = useState("Test")}
         <DButton 
             width={$PARENT:GetWide() * 0.5} 
             text={"Привет"}
             onClick={function() print("Привет!") end} 
             paint={function(self) print("fdfwe") end}
-            test={555}
         />
 
         <DLabel size={$PARENT:GetWide() * 0.3, $PARENT:GetTall() * 0.5} text={"Простая текстовая метка"} />
-        <DButton onClick={function(a) print(a) end}/>
+        <DButton 
+            onClick={function(a) 
+                counter.setState(function(prev) 
+                    return prev + 1
+                end) 
+            end}
+        />
         <DFrame>INJECT(TestComponent)</DFrame>
         {local options = {11, 22, 33}}
 
         MAP(options) [
-            <DLabel id={$INDEX} text={$ITEM} />
+            <DLabel @time @counter id={$INDEX} text={$ITEM} />
         ]
 
         IF(true) [
-            <DLabel text={a} />
+            <DLabel @time @counter text={tostring(counter.value)} />
         ]
         
     </DFrame>
