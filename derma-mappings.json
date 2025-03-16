@@ -11,11 +11,14 @@
       "title": { "method": "SetTitle", "mapType": "classFunc" },
       "text": { "method": "SetText", "mapType": "classFunc" },
       "onClick": { "method": "DoClick", "mapType": "property" },
-      "paint": { "method": "Paint", "mapType": "property" }
+      "paint": { "method": "Paint", "mapType": "property" },
+      "_getWidth": { "method": "GetWide", "mapType": "classFunc" },
+      "_getHeight": { "method": "GetTall", "mapType": "classFunc" },
+      "test": { "method": "Test", "mapType": "func" }
     },
     "dermaMappings": {
       "DFrame": ["width", "height", "size", "title", "text", "paint"],
-      "DButton": ["width", "height", "size", "onClick", "text", "paint"],
+      "DButton": ["width", "height", "size", "onClick", "text", "paint", "test"],
       "DLabel": ["width", "height", "size", "text", "paint"]
     }
   }

@@ -27,7 +27,7 @@ async function parseLDX(inputFile) {
         let result;
         result = parser.parse(ldxContent);
         if (config.generateAlias) {
-            result = aliasParser.parse(result);
+            result = aliasParser.parse(result + '\n');
         }
         if (config.minify) {
             result = minify.minifyLua(result);
@@ -37,6 +37,7 @@ async function parseLDX(inputFile) {
     } 
     catch (e) {
         logger.warn(`Failed to parse ${inputFile}: ${e}`);
+        console.log(e)
        // const ldxContent = await fs.promises.readFile(inputFile, 'utf8');
         //let result;
         //result = parser.parse(ldxContent);

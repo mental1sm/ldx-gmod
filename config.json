@@ -1,6 +1,8 @@
 {
     "varPrefix": "_",
     "aliasPrefix": "_z",
+    "indexVar": "_",
+    "itemVar": "_i",
     "generateAlias": true,
     "minify": false,
     "outputDirectory": "./dist",

@@ -30,51 +30,74 @@
     );
 
     const identifiedComponents = []
-    
-    // Vars unique name generator
-    let varCounter = 0;
-    function makeElement(tag, props, children, parentName = null) {
-        // If has id, than name will be id, else generated
-        let varName;
-        if (props.id && typeof(props.id) === 'string') {
-            varName = props.id.replaceAll('\"', '');
-            identifiedComponents[varName] = props;
+
+    function replaceParrentAlias(value, parentName) {
+        let processedVal = value;
+        if (parentName && typeof value === 'string' && value.includes('$PARENT')) {
+            processedVal = value.replace(/\$PARENT/g, parentName ? parentName : '');
         }
-        else varName = `${config.varPrefix}${varCounter++}`;
+        else if (value.includes('$PARENT')) processedVal = value.replace(/\$PARENT/g, 'PARENT');
+        return processedVal
+    }
 
-        //logger.debug(`Generating ${varName} with tag ${tag} and parent ${parentName}`)
-        let lua = `local ${varName} = vgui.Create("${tag}"${parentName ? ', ' + parentName : ', PARENT'})\n`;
+    function processType(element, parentName = null) {
+        console.log(element);
+        if (element.type === "if") {
+            let lua = `if ${element.condition} then\n`;
+            lua += element.children.map(child => processType(child, parentName)).join('');
+            lua += "end\n";
+            console.log(lua);
+            return lua;
+        } else if (element.type === "map") {
+            let lua = `for ${config.indexVar || 'i'}, ${config.itemVar || 'item'} in pairs(${element.iterable}) do\n`;
+            lua += element.children.map(child => {
+                let childCode = processType(child, parentName);
+                return childCode
+                    .replace(/\$INDEX/g, config.indexVar || 'i')
+                    .replace(/\$ITEM/g, config.itemVar || 'item');
+            }).join('');
+            lua += "end\n";
+            return lua;
+        } else if (element.type === "inline") {
+            const code = replaceParrentAlias(element.code, parentName);
+            return code + "\n";
+        } else if (element.type === "inject") {
+            return `${element.name}(${element.arg}, ${parentName || 'PARENT'})\n`;
+        }
 
-        const mappings = dermaMappings[tag] || {};
-        //logger.debug('Detected mappings:\n' + mappings.toString())
+        return makeElement(element, parentName);
+    }
 
+    let varCounter = 0;
+    function makeElement(element, parentName = null) {
+        let varName = element.props.id && typeof(element.props.id) === 'string'
+            ? element.props.id.replaceAll('\"', '')
+            : `${config.varPrefix}${varCounter++}`;
+        identifiedComponents[varName] = element.props;
+
+        let lua = `local ${varName} = vgui.Create("${element.tag}"${parentName ? ', ' + parentName : ', PARENT'})\n`;
+        const mappings = dermaMappings[element.tag] || {};
         let propsStr = '';
 
-        // Processing props
-        Object.entries(props || {}).forEach(([key, val]) => {
+        Object.entries(element.props || {}).forEach(([key, val]) => {
             const mapping = mappings[key];
-            if (!mapping) return; // Prop does not supported in this component, so ignore it
-
-            let processedVal = val;
-            if (parentName && typeof val === 'string' && val.includes('$PARENT')) {
-                processedVal = val.replace(/\$PARENT/g, parentName ? parentName : '');
-            }
-            else if (val.includes('$PARENT')) processedVal = val.replace(/\$PARENT/g, 'PARENT');
-
-            propsStr += mapping.mapType(varName, mapping.method, processedVal);            
+            if (!mapping) return;
+            let processedVal = replaceParrentAlias(val, parentName);
+            propsStr += mapping.mapType(varName, mapping.method, processedVal);
         });
 
         lua += propsStr;
 
-        if (children.length) {
-            lua += children.map(child => {
+        if (element.children.length) {
+            lua += element.children.map(child => {
                 if (child.type === "inject") {
-
                     return `${child.name}(${child.arg}, ${varName})\n`;
+                } else if (child.type === "inline") {
+                    const code = replaceParrentAlias(child.code, varName);
+                    return code + "\n";
                 }
-                return makeElement(child.tag, child.props || [], child.children || [], varName)
-                }
-                ).join('');
+                return processType(child, varName);
+            }).join('');
         }
         return lua;
     }
@@ -90,7 +113,7 @@ componentDef
     = externalCode:(externalCode WS)? "Component" WS name:[A-Za-z]+ WS "=" WS "{" WS elements:element* WS "}" {
         const external = externalCode ? externalCode[0] + "\n\n" : "";
         const code = `function ${name.join('')}(LDX_INPUT_ARGS, PARENT)\n` + 
-                    elements.map(elem => makeElement(elem.tag, elem.props, elem.children)).join('') + 
+                    elements.map(elem => processType(elem)).join('') + 
                     "end";
         return { code: external + code };
     }
@@ -103,9 +126,8 @@ externalCodeDef
 externalCode
     = "{" val:[^}]* "}" { return val.join(''); }
 
-
 element 
-    = "<" tag:tagName props:prop* ">" WS children:(WS (element / inject))* WS "</" tagName ">"
+    = "<" tag:tagName props:prop* ">" WS children:(WS (element / inject / inlineCode / ifBlock / mapBlock))* WS "</" tagName ">"
     { 
         return { 
             tag: tag, 
@@ -115,6 +137,21 @@ element
     }
     / "<" tag:tagName props:prop* WS "/>"
     { return { tag: tag, props: Object.fromEntries(props), children: [] }; }
+    / inlineCode
+    / ifBlock
+    / mapBlock
+
+inlineCode
+    = "{" WS content:nestedCurly WS "}" { return { type: "inline", code: content }; }
+
+nestedCurly
+    = chars:(nestedCurlyContent / nestedCurlyBlock)* { return chars.join(''); }
+
+nestedCurlyContent
+    = char:[^{}]+ { return char.join(''); }
+
+nestedCurlyBlock
+    = "{" WS inner:nestedCurly WS "}" { return "{" + inner + "}"; }
 
 tagName
     = [A-Za-z]+ { return text(); }
@@ -124,11 +161,28 @@ prop
 
 value
     = "\"" val:[^\"]* "\"" { return val.join(''); }
-    / "{" val:[^}]* "}" { return val.join(''); }
+    / "{" val:nestedCurly "}" { return val; }
 
 WS "whitespace" = [ \t\r\n]*
-
 
 inject
     = "INJECT(" WS name:[A-Za-z]+ WS ")"
     { return { type: "inject", name: name.join(""), arg: "LDX_INPUT_ARGS" }; }
+
+ifBlock
+    = "IF(" condition:[^)]+ ")" WS "[" WS elements:(element WS)* WS "]" {
+        return { 
+            type: "if", 
+            condition: condition.join(''), 
+            children: elements.map(e => e[0]) 
+        };
+    }
+
+mapBlock
+    = "MAP(" iterable:[^)]+ ")" WS "[" WS elements:(element WS)* WS "]" {
+        return { 
+            type: "map", 
+            iterable: iterable.join(''), 
+            children: elements.map(e => e[0]) 
+        };
+    }

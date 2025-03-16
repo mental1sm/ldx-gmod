@@ -1,23 +1,38 @@
 {
 if SERVER then 
     AddCSLuaFile() 
-    return   
+    local function test(a)
+        print(a)
+    end
+    local b = test(1488)
+    return
 end
 }
 
 Component OpenTestMenu = {
-    <DFrame id={root} width={700} height={500}>
+    <DFrame width={700} height={500}>
+        {local a = 1488}
         <DButton 
             width={$PARENT:GetWide() * 0.5} 
             text={"Привет"}
             onClick={function() print("Привет!") end} 
             paint={function(self) print("fdfwe") end}
+            test={555}
         />
 
         <DLabel size={$PARENT:GetWide() * 0.3, $PARENT:GetTall() * 0.5} text={"Простая текстовая метка"} />
         <DButton onClick={function(a) print(a) end}/>
         <DFrame>INJECT(TestComponent)</DFrame>
-   
+        {local options = {11, 22, 33}}
+
+        MAP(options) [
+            <DLabel id={$INDEX} text={$ITEM} />
+        ]
+
+        IF(true) [
+            <DLabel text={a} />
+        ]
+        
     </DFrame>
 }
 
