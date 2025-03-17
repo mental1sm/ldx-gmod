@@ -1,7 +1,9 @@
 {
 include('use-state.lua')
+include('use-effect.lua')
 if SERVER then 
-    AddCSLuaFile() 
+    AddCSLuaFile()
+    return
 end
 }
 
@@ -9,9 +11,18 @@ Component OpenTestMenu = {
     <DFrame width={700} height={500}>
         {local counter = useState(0)}
         {local time = useState("Test")}
+        {
+            useEffect(function() 
+                print("Счетчик: " .. counter.value)
+
+                return function()
+                    print("Компонент размонтирован")
+                end
+            end, {counter})
+        }
         <DButton  
             width={$PARENT:GetWide() * 0.5} 
-            setText={"Привет"}
+            setText={"Привет"} 
             doClick={function() print("Привет!") end} 
             paint={function(self) print("fdfwe") end}
         />
@@ -31,21 +42,9 @@ Component OpenTestMenu = {
             <DLabel @time @counter id={$INDEX} setText={$ITEM} />
         ]
 
-        IF(true) [
+        IF(1 ~= 2) [
             <DLabel @time @counter setText={tostring(counter.value)} />
         ]
-
-        {
-            if 2 > 5 then [&
-                <DLabel text={"Привет. Тут предлагает атрибуты (автодополнение)"}></DLabel>
-                <DButton text={function() }></DButton>
-                {function()
-                    print() 
-                 end}
-            &] end
-        }
-
-        <DButton></DButton>
         
         
     </DFrame>
@@ -54,5 +53,15 @@ Component OpenTestMenu = {
 Component TestComponent = {
     <DFrame width={$PARENT:GetWide() * 0.5}>
         <DButton width={$PARENT:GetWide() * 0.5} setText={"Другой компонент"}/>
+    </DFrame>
+}
+
+Component InnerIf = {
+    <DFrame width={$PARENT:GetWide() * 0.5}>
+        MAP({1, 3, 4}) [
+            MAP({11, 22, 33}) [
+                <DButton setText={"123"} />
+            ]
+        ]
     </DFrame>
 }

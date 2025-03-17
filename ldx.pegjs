@@ -30,12 +30,21 @@
 
     function getInheritedAttributes(tag, mappings) {
         const result = new Set();
-        let currentTag = tag;
-        while (currentTag && mappings.dermaMappings[currentTag]) {
-            mappings.dermaMappings[currentTag].forEach(attr => result.add(attr));
+        
+        function collectDermaAttributes(currentTag) {
+            if (!currentTag || !mappings.inheritance[currentTag]) return;
+
+            if (mappings.dermaMappings[currentTag]) {
+                mappings.dermaMappings[currentTag].forEach(attr => result.add(attr));
+            }
+
             const parents = mappings.inheritance[currentTag];
-            currentTag = parents && parents.length > 0 ? parents[0] : null;
+            if (parents) {
+                parents.forEach(parent => collectDermaAttributes(parent));
+            }
         }
+        
+        collectDermaAttributes(tag);
         return Array.from(result);
     }
 
@@ -57,7 +66,6 @@
     }
 
     function processType(element, parentName = null) {
-        console.log(element);
 
         if (element.type === 'if') {
             let lua = `if ${element.condition} then\n`;
@@ -126,24 +134,30 @@
 
         let propsStr = '';
 
-        // Добавляем функцию UpdateProps для подписчиков
         if (element.subscriptions && element.subscriptions.length > 0) {
-            propsStr += `${varName}.__Update__ = function(self)\n`;
+            const subscriptionStr = element.subscriptions.join(', ')
+            
+            element.subscriptions.forEach(stateName => {
+            propsStr += `${varName}.__Update__${stateName} = function(self, ${stateName})\n`;
+            
             Object.entries(element.props || {}).forEach(([key, val]) => {
                 const mapping = mappings[key];
                 if (!mapping) return;
                 let processedVal = replaceParentAlias(val, parentName);
                 propsStr += mapping.mapType("self", mapping.method, processedVal);
             });
+            
             propsStr += `self:InvalidateChildren(true)\n`;
             propsStr += `end\n`;
-            propsStr += `${varName}:__Update__()\n`;
-            // Подписываем элемент на все указанные состояния
-            element.subscriptions.forEach(stateName => {
-                propsStr += `${stateName}.subscribe(${varName})\n`;
-            });
+            
+            const updateFunc = `${varName}:__Update__${stateName}`;
+            propsStr += `${updateFunc}(${stateName})\n`;
+            propsStr += `${stateName}.subscribe(function(state)\n`;
+            propsStr += `${updateFunc}(state)\n`
+            propsStr += `end)\n`;
+        });
+
         } else {
-            // Обычная обработка свойств для элементов без подписки
             Object.entries(element.props || {}).forEach(([key, val]) => {
                 const mapping = mappings[key];
                 if (!mapping) return;
@@ -179,10 +193,15 @@ start
     }
 
 componentDef
-    = externalCode:(externalCode WS)? "Component" WS name:[A-Za-z]+ WS "=" WS "{" WS elements:element* WS "}" {
+    = externalCode:(externalCode WS)? "Component" WS name:[A-Za-z]+ WS "=" WS "{" WS inlineBefore:inlineCode? WS elements:element* WS inlineAfter:inlineCode? WS "}" {
         const external = externalCode ? externalCode[0] + "\n\n" : "";
+        console.log("inlineBefore:", inlineBefore);  // Debug
+        const inlineBeforeCode = inlineBefore && inlineBefore.code ? inlineBefore.code + '\n' : '';
+        const inlineAfterCode = inlineAfter && inlineAfter.code ? inlineAfter.code + '\n' : '';
         const code = `function ${name.join('')}(LDX_INPUT_ARGS, PARENT)\n` + 
+                    inlineBeforeCode +
                     elements.map(elem => processType(elem)).join('') + 
+                    inlineAfterCode +
                     "end";
         return { code: external + code };
     }
@@ -212,7 +231,7 @@ element
     / mapBlock
 
 subscription
-    = WS "@" name:[a-zA-Z]+ { return ["@", name.join('')]; }
+    = WS "@" name:[a-zA-Z0-9]+ { return ["@", name.join('')]; }
 
 inlineCode
     = "{" WS content:nestedCurly WS "}" { return { type: "inline", code: content }; }
@@ -244,16 +263,17 @@ inject
     { return { type: "inject", name: name.join(""), arg: "LDX_INPUT_ARGS" }; }
 
 ifBlock
-    = "IF(" condition:[^)]+ ")" WS "[" WS elements:(element WS)* WS "]" {
+    = "IF(" condition:[^)]+ ")" WS subscriptions:subscription* WS "[" WS elements:(element WS)* WS "]" {
         return { 
             type: "if", 
             condition: condition.join(''), 
-            children: elements.map(e => e[0]) 
+            children: elements.map(e => e[0]),
+            subscriptions: subscriptions
         };
     }
 
 mapBlock
-    = "MAP(" iterable:[^)]+ ")" WS "[" WS elements:(element WS)* WS "]" {
+    = "MAP(" iterable:[^)]+ ")" WS subscriptions:subscription* WS "[" WS elements:(element WS)* WS "]" {
         return { 
             type: "map", 
             iterable: iterable.join(''), 

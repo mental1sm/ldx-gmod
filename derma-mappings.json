@@ -328,11 +328,11 @@
         "setY": { "method": "SetY", "mapType": "classFunc" },
         "setZPos": { "method": "SetZPos", "mapType": "classFunc" },
         "_show": { "method": "Show", "mapType": "classFunc", "noArgs": true },
-        "_sizeTo": { "method": "SizeTo", "mapType": "classFunc" },
-        "_sizeToChildren": { "method": "SizeToChildren", "mapType": "classFunc" },
-        "_sizeToContents": { "method": "SizeToContents", "mapType": "classFunc", "noArgs": true },
-        "_sizeToContentsX": { "method": "SizeToContentsX", "mapType": "classFunc" },
-        "_sizeToContentsY": { "method": "SizeToContentsY", "mapType": "classFunc" },
+        "sizeTo": { "method": "SizeTo", "mapType": "classFunc" },
+        "sizeToChildren": { "method": "SizeToChildren", "mapType": "classFunc" },
+        "sizeToContents": { "method": "SizeToContents", "mapType": "classFunc", "noArgs": true },
+        "sizeToContentsX": { "method": "SizeToContentsX", "mapType": "classFunc" },
+        "sizeToContentsY": { "method": "SizeToContentsY", "mapType": "classFunc" },
         "_slideDown": { "method": "SlideDown", "mapType": "classFunc" },
         "_slideUp": { "method": "SlideUp", "mapType": "classFunc" },
         "_startBoxSelection": { "method": "StartBoxSelection", "mapType": "classFunc", "noArgs": true },
@@ -453,7 +453,7 @@
         "DAlphaBar": ["Panel"],
         "DBinder": ["Panel"],
         "DBubbleContainer": ["Panel"],
-        "DButton": ["Panel", "DLabel"],
+        "DButton": ["DLabel"],
         "DCategoryList": ["Panel"],
         "DCheckBox": ["Panel"],
         "DCheckBoxLabel": ["Panel"],
@@ -698,7 +698,12 @@
             "stretchRightTo",
             "stretchToParent",
             "toggleSelection",
-            "toggleVisible"
+            "toggleVisible",
+            "sizeToContentsY",
+            "sizeToContentsX",
+            "sizeToContents",
+            "sizeToChildren",
+            "sizeTo"
         ],
         "DPanel": [
             "backgroundColor",
@@ -766,7 +771,7 @@
             "setTextColor"
         ],
         "DImageButton": [
-            "onClick",
+            "doClick",
             "image",
             "pos"
         ]

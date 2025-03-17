@@ -1,0 +1,17 @@
+{
+include('use-state.lua')
+include('use-effect.lua')
+if SERVER then 
+    AddCSLuaFile()
+    return
+end
+}
+
+Component Test = {
+    {local counter = useState(0)}
+    <DFrame size={300, 200} center popup setTitle={"useState Test"}>
+        <DLabel @counter setText={"Counter: " .. counter.value} pos={20, 50} sizeToContents />
+        <DButton setText={"Increment"} pos={20, 100} size={100, 30} 
+        doClick={function() counter.setState(function(prev) return prev + 1 end) end} />
+    </DFrame>
+}

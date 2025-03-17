@@ -1,0 +1,18 @@
+{
+include('ldxflib.lua')
+if SERVER then 
+    AddCSLuaFile() 
+end
+}
+
+Component TestMenu = {
+    <DFrame
+        id={"root"} size={ScrW(), ScrH()} popup
+        pos={0, 0} title={""} draggable={false}>
+            {local counter = useState(0)}
+            MAP(counter) [
+                <DLabel @counter text={$ITEM.value} />
+            ]
+            <DLabel @filterStore.state text={filterStore.filters}>
+    </DFrame>
+}

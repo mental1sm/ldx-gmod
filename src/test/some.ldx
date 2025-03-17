@@ -1,5 +1,5 @@
 {
-include('use-state.lua')
+include('ldxflib.lua')
 if SERVER then 
     AddCSLuaFile() 
 end
@@ -7,6 +7,7 @@ local iconBtnSize = {16, 16}
 }
 
 Component TestMenu = {
+    {local counter = useState(0)}
     <DFrame
         id={"root"} size={ScrW(), ScrH()} popup
         pos={0, 0} title={""} draggable={false}
@@ -19,6 +20,11 @@ Component TestMenu = {
             {root.startTime = SysTime()}
             <DImageButton pos={ScrW() - 30, 10} size={iconBtnSize[0], iconBtnSize[1]}
                 image={"icon16/cross.png"} onClick={function() root:Close() end} />
+
+                MAP(@C) [
+
+                ]
+            <DButton doClick={} />
             
     </DFrame>
 

@@ -41,7 +41,7 @@ async function parseLDX(inputFile) {
     } 
     catch (e) {
         logger.warn(`Failed to parse ${inputFile}: ${e}`);
-        //console.log(e)
+        console.log(e)
     }
 }
 
