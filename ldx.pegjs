@@ -106,14 +106,6 @@
         return makeElement(element, parentName);
     }
 
-    function processSubscriptions(element, code, varname) {
-        if (element.subscriptions && element.subscriptions.length > 0) {
-            code += `${varName}.UpdateProps = function(self)\n`;
-
-
-        }
-    }
-
     function makeElement(element, parentName = null) {
         let varName = element.props.id && typeof(element.props.id) === 'string' || element.customVarName
             ? element.customVarName || element.props.id.replaceAll('\"', '')
@@ -165,9 +157,6 @@
                 propsStr += mapping.mapType(varName, mapping.method, processedVal);
             });
         }
-
-
-        //
 
         lua += propsStr;
 
