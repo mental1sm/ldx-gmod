@@ -28,6 +28,17 @@
         ])
     );
 
+    function getInheritedAttributes(tag, mappings) {
+        const result = new Set();
+        let currentTag = tag;
+        while (currentTag && mappings.dermaMappings[currentTag]) {
+            mappings.dermaMappings[currentTag].forEach(attr => result.add(attr));
+            const parents = mappings.inheritance[currentTag];
+            currentTag = parents && parents.length > 0 ? parents[0] : null;
+        }
+        return Array.from(result);
+    }
+
     // === Global State ===
     const identifiedComponents = [];
     let varCounter = 0;
@@ -107,7 +118,12 @@
             :
             lua = `local ${varName} = vgui.Create("${element.tag}"${parentName ? ', ' + parentName : ', PARENT'})\n`;
 
-        const mappings = dermaMappings[element.tag] || {};
+
+        const inheritedAttrs = getInheritedAttributes(element.tag, mappingConfig);
+        const mappings = Object.fromEntries(
+            inheritedAttrs.map(attr => [attr, baseMappings[attr]])
+        );
+
         let propsStr = '';
 
         // Добавляем функцию UpdateProps для подписчиков

@@ -31,7 +31,6 @@
   }
 
   const methods = Object.values(mappingConfig.baseMappings).map(m => m.method);
-  console.log('[Init] Methods from mappingConfig:', methods);
 }
 
 start

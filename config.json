@@ -3,7 +3,7 @@
     "aliasPrefix": "_z",
     "indexVar": "__",
     "itemVar": "_i",
-    "generateAlias": false,
+    "generateAlias": true,
     "minify": false,
     "rename": true,
     "outputDirectory": "./dist",
