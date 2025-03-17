@@ -6,72 +6,62 @@ const mappingConfig = JSON.parse(fs.readFileSync('derma-mappings.json', 'utf8'))
 const ldxAliaser = require('./util/ldx-aliaser')
 const ldxInheritance = require('./util/ldx-inheritance')
 
-// === Lua Generation Types ===
-const types = {
-    func: (varName, method, value) => `${varName}.${method}(${value || ''})\n`,
-    classFunc: (varName, method, value) => `${varName}:${method}(${value || ''})\n`,
-    property: (varName, method, value) => `${varName}.${method} = ${value.replace(/^\s+|\s+$/g, '')}\n`, // trim spaces at the start & end of value
-};
-
 // === Global State ===
 const identifiedComponents = [];
 let varCounter = 0;
 
 function processIf(element, parentName = null) {
-    if (element.type === 'if') {
-        let lua = `if ${element.condition} then\n`;
-        lua += element.children.map(child => typePipeline.processAll(child, parentName)).join('');
+    let lua = ''
+    if (element && element.type === 'if') {
+        lua += `if ${element.condition} then\n`;
+        lua += element.children.map(child => typePipeline(child, parentName).processAll()).join('');
         lua += 'end\n';
-        console.log(lua);
-        return lua;
+        return lua
     }
-    return ''
 }
 
 function processMap(element, parentName = null) {
-    if (element.type === 'map') {
-        let lua = '';
+    let lua = ''
+    if (element && element.type === 'map') {
         const mapTableName = `${config.varPrefix}${varCounter++}`;
-        lua = `local ${mapTableName} = {}\n` ;
-        lua += `for ${config.indexVar || 'i'}, ${config.itemVar || 'item'} in pairs(${element.iterable}) do\n`;
-        lua += element.children
+        lua += `local ${mapTableName} = {}\n` ;
+        lua += `for ${config.indexVar || 'i'}, ${config.itemVar || 'item'} in ipairs(${element.iterable}) do\n`;
+        element.children
             .map(child => {
                 child.customVarName = `${mapTableName}[$INDEX]`
                 child.notGenerateVariable = true
-                const childCode = typePipeline.processAll(child, parentName)
-                return childCode
+                const childCode = typePipeline(child, parentName).processAll()
+                lua += childCode
                     .replace(/\$INDEX/g, config.indexVar || `i`)
                     .replace(/\$ITEM/g, config.itemVar || 'item');
             })
             .join('');
         lua += 'end\n';
-        return lua;
+        return lua
     }
-    return ''
 }
 
 function processInlineCode(element, parentName = null) {
-    if (element.type === 'inline') {
+    let lua = ''
+    if (element && element.type === 'inline') {
         const code = ldxAliaser.replaceParentAlias(element.code, parentName);
-        return `${code}\n`;
+        lua += `${code}\n`;
+        return lua
     }
-    return ''
 }
 
 function processElement(element, parentName = null) {
-    // Generating variable name
-    let varName = element.props.id && typeof(element.props.id) === 'string' || element.customVarName
+    let lua = ''
+    let varName = (element.props.id && typeof(element.props.id) === 'string') || element.customVarName
         ? element.customVarName || element.props.id.replaceAll('\"', '')
         : `${config.varPrefix}${varCounter++}`;
     identifiedComponents[varName] = element.props;
 
-    let lua;
-
     // If flag notGeneratedVariable then definition of variable was before; skip definition
     element.notGenerateVariable ? 
-        lua = `${varName} = vgui.Create("${element.tag}"${parentName ? ', ' + parentName : ', PARENT'})\n`
+        lua += `${varName} = vgui.Create("${element.tag}"${parentName ? ', ' + parentName : ', PARENT'})\n`
         :
-        lua = `local ${varName} = vgui.Create("${element.tag}"${parentName ? ', ' + parentName : ', PARENT'})\n`;
+        lua += `local ${varName} = vgui.Create("${element.tag}"${parentName ? ', ' + parentName : ', PARENT'})\n`;
 
 
     // Calculating actual mappings of element
@@ -89,18 +79,20 @@ function processElement(element, parentName = null) {
     
     // Children processing
     const childrenCode = processElementChildren(element.children, varName)
-    return lua + childrenCode
+    lua += childrenCode;
+    return lua
 }
 
 function processCommonElementProps(element, varName, mappings, parentName = null) {
-    let propStr = '';
+    let propsStr = '';
     Object.entries(element.props || {}).forEach(([key, val]) => {
         const mapping = mappings[key];
         if (!mapping) return;
         let processedVal = ldxAliaser.replaceParentAlias(val, parentName);
-        propStr += mapping.mapType(varName, mapping.method, processedVal);
+        if (!processedVal) processedVal = ''
+        propsStr += mapping.mapType(varName, mapping.method, processedVal);
     });
-    return propStr;
+    return propsStr;
 }
 
 function processReactiveElementProps(element, varName, mappings, parentName = null) {
@@ -126,7 +118,7 @@ function processReactiveElementProps(element, varName, mappings, parentName = nu
         propsStr += `end)\n`;
     })
 
-    return propStr
+    return propsStr;
 }
 
 function processElementChildren(children, varName) {
@@ -139,30 +131,28 @@ function processElementChildren(children, varName) {
                 const code = ldxAliaser.replaceParentAlias(child.code, varName);
                 return code + "\n";
             }
-            return typePipeline.processAll(child, varName);
+            return typePipeline(child, varName).processAll();
         }).join('');
     }
     return lua;
 }
 
 function typePipeline(element, parentName = null) {
-    let result = element;
-
     return {
         processAll: () => {
-            result = processIf(result, parentName);
+            let result = processIf(element, parentName);
             if (result) return result;
 
-            result = processMap(result, parentName);
+            result = processMap(element, parentName);
             if (result) return result;
 
-            result = processInlineCode(result, parentName);
+            result = processInlineCode(element, parentName);
             if (result) return result;
 
-            result = processElement(result, parentName);
+            result = processElement(element, parentName);
             if (result) return result;
 
-            logger.warn("No processing matched! Returning empty string.");
+            logger.warn('No processing matched! Returning empty string.');
             return '';
         }
     }

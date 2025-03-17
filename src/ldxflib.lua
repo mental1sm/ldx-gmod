@@ -36,22 +36,46 @@ end
 
 
 function createStore(createStoreFn)
-    local state = useState({})
+    local subscribers = {}
+    local state = {}
 
-    local function setState(fnOrNewState)
-        local newState = nil
-        if type(fnOrNewState) == "function" then
-            newState = fnOrNewState(state.value)
-        else
-            newState = fnOrNewState
+    local function notify()
+        for _, callback in pairs(subscribers) do
+            callback(state)
         end
-        state.setState(newState)
     end
 
-    local store = createStoreFn(setState)
+    local function set(partialState)
+        if type(partialState) == "function" then
+            partialState = partialState(state)
+        end
+        for k, v in pairs(partialState) do
+            state[k] = v
+        end
+        notify()
+    end
 
-    return store, state
+    local store = createStoreFn(set)
+
+    local proxy = setmetatable({}, {
+        __index = function(_, k)
+            return state[k]
+        end,
+        __newindex = function(_, k, v)
+            state[k] = v
+            notify()
+        end
+    })
+
+    for k, v in pairs(store) do
+        proxy[k] = v
+    end
+
+    return proxy, function(callback)
+        table.insert(subscribers, callback)
+    end
 end
+
 
 
 function useMemo(computedFn, dependencies)

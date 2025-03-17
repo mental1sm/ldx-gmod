@@ -6,13 +6,14 @@ end
 }
 
 Component TestMenu = {
+    {local store = createStore();}
     <DFrame
         id={"root"} size={ScrW(), ScrH()} popup
         pos={0, 0} title={""} draggable={false}>
             {local counter = useState(0)}
-            MAP(counter) [
-                <DLabel @counter text={$ITEM.value} />
+            MAP(@counter.value) [
+                <DLabel @counter setText={$ITEM.value} />
             ]
-            <DLabel @filterStore.state text={filterStore.filters}>
+            <DLabel @store setText={store.filters} />
     </DFrame>
 }

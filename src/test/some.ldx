@@ -21,9 +21,7 @@ Component TestMenu = {
             <DImageButton pos={ScrW() - 30, 10} size={iconBtnSize[0], iconBtnSize[1]}
                 image={"icon16/cross.png"} onClick={function() root:Close() end} />
 
-                MAP(@C) [
-
-                ]
+            
             <DButton doClick={} />
             
     </DFrame>

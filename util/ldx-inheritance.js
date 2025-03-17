@@ -2,6 +2,13 @@ const fs = require('fs');
 const config = JSON.parse(fs.readFileSync('config.json', 'utf8'));
 const mappingConfig = JSON.parse(fs.readFileSync('derma-mappings.json', 'utf8'));
 
+// === Lua Generation Types ===
+const types = {
+    func: (varName, method, value) => `${varName}.${method}(${value || ''})\n`,
+    classFunc: (varName, method, value) => `${varName}:${method}(${value || ''})\n`,
+    property: (varName, method, value) => `${varName}.${method} = ${value ? value.replace(/^\s+|\s+$/g, '') : 'function() end'}\n`, // trim spaces at the start & end of value
+};
+
 const baseMappings = Object.fromEntries(
     Object.entries(mappingConfig.baseMappings).map(([key, val]) => [
         key,

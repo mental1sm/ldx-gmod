@@ -9,6 +9,7 @@ const renamer = require('./util/renamer')
 const config = JSON.parse(fs.readFileSync('config.json', 'utf8'));
 const grammar = fs.readFileSync('ldx.pegjs', 'utf8')
 const luaGrammar = fs.readFileSync('aliases.pegjs', 'utf8')
+const typePipe = require('./ldx.pipeline')
 const parser = peggy.generate(grammar)
 const aliasParser = peggy.generate(luaGrammar)
 
@@ -26,7 +27,7 @@ async function parseLDX(inputFile) {
     try {
         const ldxContent = await fs.promises.readFile(inputFile, 'utf8');
         let result;
-        result = parser.parse(ldxContent);
+        result = parser.parse(ldxContent, {typePipe});
         if (config.generateAlias) {
             result = aliasParser.parse(result + '\n');
         }
