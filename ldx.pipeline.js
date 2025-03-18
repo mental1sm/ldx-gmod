@@ -97,27 +97,129 @@ function processCommonElementProps(element, varName, mappings, parentName = null
 
 function processReactiveElementProps(element, varName, mappings, parentName = null) {
     let propsStr = '';
-        
-    element.subscriptions.forEach(stateName => {
-        propsStr += `${varName}.__Update__${stateName} = function(self, ${stateName})\n`;
-        
-        Object.entries(element.props || {}).forEach(([key, val]) => {
-            const mapping = mappings[key];
-            if (!mapping) return;
-            let processedVal = ldxAliaser.replaceParentAlias(val, parentName);
-            propsStr += mapping.mapType("self", mapping.method, processedVal);
-        });
-        
-        propsStr += `self:InvalidateChildren(true)\n`;
-        propsStr += `end\n`;
-        
-        const updateFunc = `${varName}:__Update__${stateName}`;
-        propsStr += `${updateFunc}(${stateName})\n`;
-        propsStr += `${stateName}.subscribe(function(state)\n`;
-        propsStr += `${updateFunc}(state)\n`
-        propsStr += `end)\n`;
+    
+    // Processing common props (without any reactive vars) as usual
+    propsStr += spawnAllNotReactiveProps(element, parentName, mappings, varName);
+
+
+    element.subscriptions.forEach(sub => {
+        // Custom onUpdate
+        if (sub.onUpdate) {
+            const clearedStateName = sub.name.replace('!', '');
+            const updateFunc = `${varName}.__Update__${clearedStateName}`;
+            propsStr += spawnAllReactiveProps(element, parentName, mappings, varName)
+            propsStr += `${updateFunc} = ${sub.onUpdate.code}\n`;
+            propsStr += `${updateFunc}(${clearedStateName})\n`;
+            propsStr += `${clearedStateName}.subscribe(function(state)\n`;
+            propsStr += `${updateFunc}(state)\n`
+            propsStr += `end)\n`;
+            return propsStr;
+        } 
+        // Update children or not
+        let update = sub.name.match('&') ? true : false;
+        if (sub.name.match('!')) {
+            propsStr += processStandartReactive(element, varName, mappings, sub.name.replace('&', ''), sub.onUpdate, parentName, update)
+        }
+        else {
+            propsStr += processRevertReactive(element, varName, mappings, sub.name.replace('&', ''), sub.onUpdate, parentName, update)
+        }
     })
 
+    propsStr = propsStr.replaceAll('@', '');
+    return propsStr;
+}
+
+/**
+ * Template @reactive change only deps-based props
+ */
+function processRevertReactive(element, varName, mappings, stateName, customUpdate = null, parentName = null, update = true) {
+    let propsStr = '';
+    const clearedStateName = stateName.replace('!', '');
+    
+    let counter = 0;
+    // processing props with reactive var
+    Object.entries(element.props || {}).forEach(([key, val]) => {
+        const mapping = mappings[key];
+        if (!mapping) return;
+        let processedVal = ldxAliaser.replaceParentAlias(val, parentName);
+        // Need to find all methods with reactive deps
+        if (processedVal && processedVal.match(`@${stateName}`)) {
+            const reactiveDep = processedVal.replace('@', '');
+            propsStr += `${varName}.__Update__${clearedStateName}${counter} = function(self, ${clearedStateName})\n`;
+            propsStr += mapping.mapType("self", mapping.method, reactiveDep);
+            // If need to update then invalidate
+            if (update) propsStr += `self:InvalidateChildren(true)\n`;
+            propsStr += `end\n`;
+            const updateFunc = `${varName}:__Update__${clearedStateName}${counter}`;
+            propsStr += `${updateFunc}(${clearedStateName})\n`;
+            propsStr += `${clearedStateName}.subscribe(function(state)\n`;
+            propsStr += `${updateFunc}(state)\n`
+            propsStr += `end)\n`;
+            counter++;
+        }
+    });
+
+    return propsStr;
+}
+
+/**
+ * Template @reactive change all props
+ */
+function processStandartReactive(element, varName, mappings, stateName, customUpdate = null, parentName = null, update = true) {
+    const clearedStateName = stateName.replace('!', '');
+    let propsStr = '';
+
+    propsStr = `${varName}.__Update__${clearedStateName} = function(self, ${clearedStateName})\n`;
+    propsStr += spawnAllProps(element, parentName, mappings)
+    
+    if (update) propsStr += `self:InvalidateChildren(true)\n`;
+    propsStr += `end\n`;
+    
+    const updateFunc = `${varName}:__Update__${clearedStateName}`;
+    propsStr += `${updateFunc}(${clearedStateName})\n`;
+    propsStr += `${clearedStateName}.subscribe(function(state)\n`;
+    propsStr += `${updateFunc}(state)\n`
+    propsStr += `end)\n`;
+    
+    return propsStr
+}
+
+function spawnAllProps(element, parentName, mappings) {
+    let propsStr = '';
+    Object.entries(element.props || {}).forEach(([key, val]) => {
+        const mapping = mappings[key];
+        if (!mapping) return;
+        let processedVal = ldxAliaser.replaceParentAlias(val, parentName);
+        propsStr += mapping.mapType("self", mapping.method, processedVal);
+    });
+    return propsStr;
+}
+
+function spawnAllNotReactiveProps(element, parentName, mappings, varName) {
+    let propsStr = '';
+    Object.entries(element.props || {}).forEach(([key, val]) => {
+        const mapping = mappings[key];
+        if (!mapping) return;
+        let processedVal = ldxAliaser.replaceParentAlias(val, parentName);
+        if (!processedVal) processedVal = ''
+        if (!processedVal.match("@[a-zA-Z_]+")) {
+            propsStr += mapping.mapType(varName, mapping.method, processedVal);
+        }
+    });
+    return propsStr;
+}
+
+function spawnAllReactiveProps(element, parentName, mappings, varName) {
+    let propsStr = '';
+    Object.entries(element.props || {}).forEach(([key, val]) => {
+        const mapping = mappings[key];
+        if (!mapping) return;
+        let processedVal = ldxAliaser.replaceParentAlias(val, parentName);
+        if (!processedVal) processedVal = ''
+        if (processedVal.match("@[a-zA-Z_]+")) {
+            propsStr += mapping.mapType(varName, mapping.method, processedVal);
+        }
+    });
     return propsStr;
 }
 

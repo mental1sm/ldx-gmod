@@ -47,13 +47,25 @@ element
         }; 
     }
     / "<" tag:tagName subscriptions:subscription* props:prop* WS "/>"
-    { return { tag: tag, props: Object.fromEntries(props), children: [], subscriptions: subscriptions.map(s => s[1]) }; }
+    { return { tag: tag, props: Object.fromEntries(props), children: [], subscriptions: subscriptions }; }
     / inlineCode
     / ifBlock
     / mapBlock
 
 subscription
-    = WS "@" name:[a-zA-Z0-9.]+ { return ["@", name.join('')]; }
+    = WS "@" name:[a-zA-Z0-9.!&]+ subscriptionBlock:subscriptionBlock?
+    { 
+        return { 
+            name: name.join(''), 
+            onUpdate: subscriptionBlock || null 
+        };
+    }
+
+subscriptionBlock
+    = "=[" WS onUpdate:(inlineCode / "") WS "]" 
+    { 
+        return onUpdate && onUpdate.type === "inline" ? onUpdate : null; 
+    }
 
 inlineCode
     = "{" WS content:nestedCurly WS "}" { return { type: "inline", code: content }; }
