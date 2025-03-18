@@ -21,8 +21,8 @@ componentDef
         const inlineBeforeCode = inlineBefore && inlineBefore.code ? inlineBefore.code + '\n' : '';
         const inlineAfterCode = inlineAfter && inlineAfter.code ? inlineAfter.code + '\n' : '';
         const body = elements.map(elem => typePipe.typePipeline(elem).processAll()).join('')
-
         const code = `function ${name.join('')}(LDX_INPUT_ARGS, PARENT)\n` + 
+                    `local ${config.variables.UNSUBSCRIBE} = {}\n` +
                     inlineBeforeCode +
                     body + 
                     inlineAfterCode +

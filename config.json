@@ -4,10 +4,13 @@
     "indexVar": "__",
     "itemVar": "_i",
     "beautify": true,
-    "generateAlias": false,
+    "generateAlias": true,
     "minify": false,
     "rename": true,
     "outputDirectory": "./dist",
     "sourceDirectory": "./src",
-    "logLevel": "WARN" 
+    "logLevel": "WARN",
+    "variables": {
+        "UNSUBSCRIBE": "__UNSB__"
+    }
 }

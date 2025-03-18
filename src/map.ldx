@@ -10,20 +10,14 @@ Component TestMenu = {
     <DFrame
         id={"root"} size={500, 700} popup
         pos={0, 0} title={""} draggable={false}>            
-            <DLabel @counter=[{function(self, counter) self:SetSteamID(1488) end}] 
-            pos={50, 50} size={200, 100} setSteamID={"24234234"} sizeToContents={@counter}
-                setText={@counter.value} />
-            <DButton size={50, 50} pos={300, 300} setText={"Increase counter"} doClick={function() 
+            MAP({0,0,0,0,0}) [
+                <DLabel @counter key={$INDEX} pos={150, 40} size={200, 100} sizeToContents setText={@counter.value} />
+            ]
+            <DButton size={200, 60} pos={300, 300} setText={"Increase counter"} 
+            doClick={function() 
                     counter.setState(function(prev) return prev + 1 end) 
-                end} />
-            
-            USE_EFFECT(function() 
-                print("ON MOUNT") 
-                print(counter.value) 
-                return function() 
-                    print("ON UNMOUNT") 
-                end 
-            end, {counter})
+                end} 
+            />
     </DFrame>
 }
 

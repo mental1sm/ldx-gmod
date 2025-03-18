@@ -120,7 +120,8 @@ function processReactiveElementProps(element, varName, mappings, parentName = nu
             propsStr += spawnAllReactiveProps(element, parentName, mappings, varName)
             propsStr += `${updateProperty} = ${sub.onUpdate.code}\n`;
             propsStr += `${updateFunc}(${clearedStateName})\n`;
-            propsStr += `local __unsb__${varCounter++} = ${clearedStateName}.subscribe(function(state)\n`;
+            if (element.props.key) propsStr += `${config.variables.UNSUBSCRIBE}["__unsb__${varName}${varCounter++}" .. ${element.props.key}] = ${clearedStateName}.subscribe(function(state)\n`;
+            else propsStr += `${config.variables.UNSUBSCRIBE}["__unsb__${varName}${varCounter++}"] = ${clearedStateName}.subscribe(function(state)\n`;
             propsStr += `${updateFunc}(state)\n`
             propsStr += `end)\n`;
             return propsStr;
@@ -174,7 +175,8 @@ function processRevertReactive(element, varName, mappings, stateName, customUpda
         })
         if (update) propsStr += `self:InvalidateChildren(true)\n`;
         propsStr += `end\n`;
-        propsStr += `local __unsb__${varCounter++} = ${clearedStateName}.subscribe(function(state)\n`;
+        if (element.props.key) propsStr += `${config.variables.UNSUBSCRIBE}["__unsb__${varName}${varCounter++}" .. ${element.props.key}] = ${clearedStateName}.subscribe(function(state)\n`;
+        else propsStr += `${config.variables.UNSUBSCRIBE}["__unsb__${varName}${varCounter++}"] = ${clearedStateName}.subscribe(function(state)\n`;
         propsStr += `${updateFunc}(state)\n`
         propsStr += `end)\n`;
         propsStr += `${updateFunc}(${clearedStateName})\n`;
@@ -199,7 +201,8 @@ function processStandartReactive(element, varName, mappings, stateName, customUp
     
     const updateFunc = `${varName}:__Update__${clearedStateName}`;
     propsStr += `${updateFunc}(${clearedStateName})\n`;
-    propsStr += `local __unsb__${varCounter++} = ${clearedStateName}.subscribe(function(state)\n`;
+    if (element.props.key) propsStr += `${config.variables.UNSUBSCRIBE}["__unsb__${varName}${varCounter++}" .. ${element.props.key}] = ${clearedStateName}.subscribe(function(state)\n`;
+    else propsStr += `${config.variables.UNSUBSCRIBE}["__unsb__${varName}${varCounter++}"] = ${clearedStateName}.subscribe(function(state)\n`;
     propsStr += `${updateFunc}(state)\n`
     propsStr += `end)\n`;
     
@@ -327,16 +330,13 @@ function generateUnmountHandle(code) {
     if (!varName) return lua
 
     const effects = findSideEffects(code)
-    const unsubs = findUnsubscribes(code)
     
     effects.map(effect => {
         lua += processSideEffect(effect)
     })
 
     lua += `${varName}.OnRemove = function(self)\n`
-    unsubs.map(unsub => {
-        lua += `${unsub}()\n`
-    })
+    lua += `for _, _u in pairs(${config.variables.UNSUBSCRIBE}) do\n\t_u()\nend\n`
     effects.map(effect => {
         lua += ` _clnp_${effect}()\n`
     })

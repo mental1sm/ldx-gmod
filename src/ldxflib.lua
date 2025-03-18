@@ -19,11 +19,10 @@ function useState(initialValue)
     end
 
     function state.subscribe(callback)
-        local index = #state.subscribers + 1
-        state.subscribers[index] = callback
+        state.subscribers[callback] = true
 
         return function()
-            state.subscribers[index] = nil
+            state.subscribers[callback] = false
         end
     end
 
