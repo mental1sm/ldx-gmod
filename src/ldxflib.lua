@@ -1,5 +1,9 @@
+if SERVER then
+    AddCSLuaFile()
+end
+
 function useState(initialValue)
-    local state = { value = initialValue, subscribers = setmetatable({}, { __mode = "v" }) }
+    local state = { value = initialValue, subscribers = {} }
 
     function state.setState(newValue)
         if type(newValue) == "function" then
@@ -15,11 +19,67 @@ function useState(initialValue)
     end
 
     function state.subscribe(callback)
-        table.insert(state.subscribers, callback)
+        local index = #state.subscribers + 1
+        state.subscribers[index] = callback
+
+        return function()
+            state.subscribers[index] = nil
+        end
     end
 
     return state
 end
+
+
+function useEffect(callback, dependencies)
+    local lastValues = {}
+    local cleanup = nil
+    local isMounted = false
+    
+    for i, dep in ipairs(dependencies) do
+        lastValues[i] = dep.value
+    end
+
+    local function runEffect()
+        local shouldRun = not isMounted
+        if not shouldRun then
+            for i, dep in ipairs(dependencies) do
+                if dep.value ~= lastValues[i] then
+                    shouldRun = true
+                    break
+                end
+            end
+        end
+
+        if shouldRun then
+            if cleanup then
+                cleanup()
+                cleanup = nil
+            end
+            
+            local result = callback()
+            if type(result) == "function" then
+                cleanup = result
+            end
+            
+            for i, dep in ipairs(dependencies) do
+                lastValues[i] = dep.value
+            end
+            isMounted = true
+        end
+        
+        return cleanup
+    end
+
+    for i, dep in ipairs(dependencies) do
+        dep.subscribe(function()
+            runEffect()
+        end)
+    end
+
+    return runEffect
+end
+
 
 
 
@@ -71,9 +131,16 @@ function createStore(createStoreFn)
         proxy[k] = v
     end
 
-    return proxy, function(callback)
-        table.insert(subscribers, callback)
+    local function subscribe(callback)
+        local index = #subscribers + 1
+        subscribers[index] = callback
+
+        return function()
+            subscribers[index] = nil
+        end
     end
+
+    return proxy, subscribe
 end
 
 
@@ -82,6 +149,7 @@ function useMemo(computedFn, dependencies)
     local memoizedValue = useState(nil)
     local prevDeps = useState({})
     local subscribers = {}
+    local unsubFunctions = {}
 
     local function setMemoizedValue()
         local hasChanged = false
@@ -110,16 +178,21 @@ function useMemo(computedFn, dependencies)
     end
 
     for _, dep in ipairs(dependencies) do
-        dep.subscribe(function()
+        local unsub = dep.subscribe(function()
             setMemoizedValue()
         end)
+        table.insert(unsubFunctions, unsub)
     end
 
     setMemoizedValue()
 
-    local function subscribe(sub)
-        table.insert(subscribers, sub)
-        sub(memoizedValue.value)
+    local function subscribe(callback)
+        local index = #subscribers + 1
+        subscribers[index] = callback
+
+        return function()
+            subscribers[index] = nil
+        end
     end
 
     return {

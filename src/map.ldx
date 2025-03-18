@@ -5,12 +5,30 @@ if SERVER then
 end
 }
 
-Component TestMenu = {
-    {local filterStore = useFilterStore();}
+Component TestMenu = { 
+    {local counter = useState(0);}
     <DFrame
-        id={"root"} size={ScrW(), ScrH()} popup
+        id={"root"} size={500, 700} popup
         pos={0, 0} title={""} draggable={false}>            
-            <DLabel @filterStore
-            setSteamID={"24234234"} setText={"HUILOR" .. @filterStore.filters .. "HUILOR"} pos={@filterStore.filters} />
+            <DLabel @counter=[{function(self, counter) self:SetSteamID(1488) end}] 
+            pos={50, 50} size={200, 100} setSteamID={"24234234"} sizeToContents={@counter}
+                setText={@counter.value} />
+            <DButton size={50, 50} pos={300, 300} setText={"Increase counter"} doClick={function() 
+                    counter.setState(function(prev) return prev + 1 end) 
+                end} />
+            
+            USE_EFFECT(function() 
+                print("ON MOUNT") 
+                print(counter.value) 
+                return function() 
+                    print("ON UNMOUNT") 
+                end 
+            end, {counter})
     </DFrame>
+}
+
+{
+    concommand.Add("open_ui3", function()
+        TestMenu()
+    end)
 }

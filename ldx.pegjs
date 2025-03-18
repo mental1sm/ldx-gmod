@@ -20,10 +20,13 @@ componentDef
         const external = externalCode ? externalCode[0] + "\n\n" : "";
         const inlineBeforeCode = inlineBefore && inlineBefore.code ? inlineBefore.code + '\n' : '';
         const inlineAfterCode = inlineAfter && inlineAfter.code ? inlineAfter.code + '\n' : '';
+        const body = elements.map(elem => typePipe.typePipeline(elem).processAll()).join('')
+
         const code = `function ${name.join('')}(LDX_INPUT_ARGS, PARENT)\n` + 
                     inlineBeforeCode +
-                    elements.map(elem => typePipe.typePipeline(elem).processAll()).join('') + 
+                    body + 
                     inlineAfterCode +
+                    typePipe.generateUnmountHandle(inlineBeforeCode + body + inlineAfterCode) +
                     "end";
         return { code: external + code };
     }
@@ -37,7 +40,7 @@ externalCode
     = "{" WS content:nestedCurly WS "}" { return content; }
 
 element 
-    = "<" tag:tagName subscriptions:subscription* props:prop* ">" WS children:(WS (element / inject / inlineCode / ifBlock / mapBlock))* WS "</" tagName ">"
+    = "<" tag:tagName subscriptions:subscription* props:prop* WS ">" WS children:(WS (element / inject / inlineCode / ifBlock / mapBlock / useEffectBlock))* WS "</" tagName ">"
     { 
         return { 
             tag: tag,
@@ -51,6 +54,7 @@ element
     / inlineCode
     / ifBlock
     / mapBlock
+    / useEffectBlock
 
 subscription
     = WS "@" name:[a-zA-Z0-9.!&]+ subscriptionBlock:subscriptionBlock?
@@ -114,3 +118,35 @@ mapBlock
             children: elements.map(e => e[0]) 
         };
     }
+
+useEffectBlock
+    = "USE_EFFECT(" WS body:luaCode WS "," WS deps:dependencyList WS ")" 
+    {
+        return {
+            type: "use_effect",
+            body: body,
+            dependencies: deps,
+        };
+    }
+
+luaCode
+    = code:$([^,]+)
+    {
+        return code.trim();
+    }
+
+dependencyList
+    = "{" WS list:identifierList? WS "}"
+    {
+        return list || [];
+    }
+
+identifierList
+    = first:identifier rest:(WS "," WS identifier)* 
+    {
+        return [first, ...rest.map(r => r[3])];  // `r[3]` — identifier after ','
+    }
+
+identifier
+    = $([a-zA-Z_][a-zA-Z0-9_]*) 
+

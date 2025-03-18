@@ -41,6 +41,15 @@ function processMap(element, parentName = null) {
     }
 }
 
+function processUseEffect(element, parentName = null) {
+    let lua = ''
+    if (element && element.type === 'use_effect') {
+        const varName = `_eff${varCounter++}`
+        lua += `local ${varName} = useEffect(${element.body}, {${element.dependencies}})\n\n`
+        return lua
+    }
+}
+
 function processInlineCode(element, parentName = null) {
     let lua = ''
     if (element && element.type === 'inline') {
@@ -106,11 +115,12 @@ function processReactiveElementProps(element, varName, mappings, parentName = nu
         // Custom onUpdate
         if (sub.onUpdate) {
             const clearedStateName = sub.name.replace('!', '');
-            const updateFunc = `${varName}.__Update__${clearedStateName}`;
+            const updateProperty = `${varName}.__Update__${clearedStateName}`;
+            const updateFunc = `${varName}:__Update__${clearedStateName}`;
             propsStr += spawnAllReactiveProps(element, parentName, mappings, varName)
-            propsStr += `${updateFunc} = ${sub.onUpdate.code}\n`;
+            propsStr += `${updateProperty} = ${sub.onUpdate.code}\n`;
             propsStr += `${updateFunc}(${clearedStateName})\n`;
-            propsStr += `${clearedStateName}.subscribe(function(state)\n`;
+            propsStr += `local __unsb__${varCounter++} = ${clearedStateName}.subscribe(function(state)\n`;
             propsStr += `${updateFunc}(state)\n`
             propsStr += `end)\n`;
             return propsStr;
@@ -135,6 +145,8 @@ function processReactiveElementProps(element, varName, mappings, parentName = nu
 function processRevertReactive(element, varName, mappings, stateName, customUpdate = null, parentName = null, update = true) {
     let propsStr = '';
     const clearedStateName = stateName.replace('!', '');
+
+    const reactiveDeps = {}
     
     let counter = 0;
     // processing props with reactive var
@@ -145,25 +157,35 @@ function processRevertReactive(element, varName, mappings, stateName, customUpda
         // Need to find all methods with reactive deps
         if (processedVal && processedVal.match(`@${stateName}`)) {
             const reactiveDep = processedVal.replace('@', '');
-            propsStr += `${varName}.__Update__${clearedStateName}${counter} = function(self, ${clearedStateName})\n`;
-            propsStr += mapping.mapType("self", mapping.method, reactiveDep);
-            // If need to update then invalidate
-            if (update) propsStr += `self:InvalidateChildren(true)\n`;
-            propsStr += `end\n`;
-            const updateFunc = `${varName}:__Update__${clearedStateName}${counter}`;
-            propsStr += `${updateFunc}(${clearedStateName})\n`;
-            propsStr += `${clearedStateName}.subscribe(function(state)\n`;
-            propsStr += `${updateFunc}(state)\n`
-            propsStr += `end)\n`;
-            counter++;
+            const reactiveRootDep = reactiveDep.match('.') ? reactiveDep.split('.')[0] : reactiveDep
+            if (!reactiveDeps[reactiveRootDep]) {
+                reactiveDeps[reactiveRootDep] = []
+            }
+            reactiveDeps[reactiveRootDep].push(mapping.mapType("self", mapping.method, reactiveDep))
         }
     });
+
+    Object.entries(reactiveDeps).forEach(([key, val]) => {
+        const updateProperty = `${varName}.__Update__${clearedStateName}${counter}`;
+        const updateFunc = `${varName}:__Update__${clearedStateName}${counter}`;
+        propsStr += `${updateProperty} = function(self, ${clearedStateName})\n`;
+        val.map(val => {
+            propsStr += val
+        })
+        if (update) propsStr += `self:InvalidateChildren(true)\n`;
+        propsStr += `end\n`;
+        propsStr += `local __unsb__${varCounter++} = ${clearedStateName}.subscribe(function(state)\n`;
+        propsStr += `${updateFunc}(state)\n`
+        propsStr += `end)\n`;
+        propsStr += `${updateFunc}(${clearedStateName})\n`;
+        counter++;
+    })
 
     return propsStr;
 }
 
 /**
- * Template @reactive change all props
+ * Template @reactive! change all reactive and non-reactive props on update
  */
 function processStandartReactive(element, varName, mappings, stateName, customUpdate = null, parentName = null, update = true) {
     const clearedStateName = stateName.replace('!', '');
@@ -177,7 +199,7 @@ function processStandartReactive(element, varName, mappings, stateName, customUp
     
     const updateFunc = `${varName}:__Update__${clearedStateName}`;
     propsStr += `${updateFunc}(${clearedStateName})\n`;
-    propsStr += `${clearedStateName}.subscribe(function(state)\n`;
+    propsStr += `local __unsb__${varCounter++} = ${clearedStateName}.subscribe(function(state)\n`;
     propsStr += `${updateFunc}(state)\n`
     propsStr += `end)\n`;
     
@@ -248,6 +270,9 @@ function typePipeline(element, parentName = null) {
             result = processMap(element, parentName);
             if (result) return result;
 
+            result = processUseEffect(element, parentName);
+            if (result) return result;
+
             result = processInlineCode(element, parentName);
             if (result) return result;
 
@@ -260,4 +285,64 @@ function typePipeline(element, parentName = null) {
     }
 }
 
+function extractVariableName(str) {
+    const match = str.match(/^\s*local\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*=/);
+    return match ? match[1] : null;
+}
+
+function findSideEffects(code) {
+    const result = []
+    const strings = code.split('\n')
+    strings.map(str => {
+        if (str.match('useEffect')) {
+            const varName = extractVariableName(str)
+            if (varName) result.push(varName);
+        }
+    })
+    return result;
+}
+
+function findUnsubscribes(code) {
+    const result = []
+    const strings = code.split('\n')
+    strings.map(str => {
+        if (str.match('__unsb__')) {
+            const varName = extractVariableName(str)
+            if (varName) result.push(varName);
+        }
+    })
+    return result;
+}
+
+function processSideEffect(sideEffect) {
+    return `local _clnp_${sideEffect} = ${sideEffect}()\n`
+}
+
+function generateUnmountHandle(code) {
+    let lua = ''
+    const strings = code.split('\n')
+    const rootElement = strings.find(str => str.match("vgui."))
+    if (!rootElement) return lua
+    const varName = extractVariableName(rootElement)
+    if (!varName) return lua
+
+    const effects = findSideEffects(code)
+    const unsubs = findUnsubscribes(code)
+    
+    effects.map(effect => {
+        lua += processSideEffect(effect)
+    })
+
+    lua += `${varName}.OnRemove = function(self)\n`
+    unsubs.map(unsub => {
+        lua += `${unsub}()\n`
+    })
+    effects.map(effect => {
+        lua += ` _clnp_${effect}()\n`
+    })
+    lua += 'end\n'
+    return lua;
+}
+
 module.exports.typePipeline = typePipeline
+module.exports.generateUnmountHandle = generateUnmountHandle
