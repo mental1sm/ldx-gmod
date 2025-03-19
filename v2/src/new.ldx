@@ -22,3 +22,17 @@ Component TestMenu = {
             <DLabel size={default} pos=~{classFunc} setText=:{property} alignBottom=+{func} center />
     </DFrame>
 }
+
+Component NotableMenu = { 
+    {local counter = useState(0);}
+    <DFrame
+        id={"root"} size={500, 700} popup
+        pos={0, 0} title={""} draggable={false}>            
+    </DFrame>
+} 
+
+{
+    concommand.Add("open_ui3", function()
+        TestMenu()
+    end)
+}

@@ -8,25 +8,22 @@
 
 // File start
 start
-    = WS components:( (componentDef / externalCodeDef) WS )* {
-        return {
-            components: components
-        };
-    }
+  = WS nodes:( (externalCodeDef / componentDef) WS )* eof {
+        console.dir(nodes, { depth: null });
+        return nodes.map(n => n[0]); 
+  }
+
 
 componentDef
-    = externalCode:(externalCode WS)? "Component" WS name:[A-Za-z]+ WS "=" WS "{" WS inlineBefore:inlineCode? WS elements:element* WS inlineAfter:inlineCode? WS "}"  {
-        const tree = { 
-            externalCode: externalCode.join(''),
+    = externalCode:(externalCode WS)? "Component" WS name:[A-Za-z0-9]+ WS "=" WS "{" WS inlineBefore:inlineCode? WS elements:element* WS inlineAfter:inlineCode? WS "}" {
+        console.log(name.join(''))
+        const tree = {
             component: name.join(''),
             body: {
                 codeBefore: inlineBefore,
                 elements: elements,
-                codeAfter: inlineAfter
-            }
-         };
-         console.dir(tree, { depth: null });
-         // console.log(util.inspect(myObject, { depth: null, colors: true }));
+                codeAfter: inlineAfter,
+            }};
 
          return tree
     }
@@ -155,3 +152,5 @@ identifierList
 identifier
     = $([a-zA-Z_][a-zA-Z0-9_]*) 
 
+eof
+  = !.
