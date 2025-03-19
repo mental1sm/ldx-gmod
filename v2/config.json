@@ -1,0 +1,16 @@
+{
+    "varPrefix": "_",
+    "aliasPrefix": "_z",
+    "indexVar": "__",
+    "itemVar": "_i",
+    "beautify": false,
+    "generateAlias": false,
+    "minify": false,
+    "rename": false,
+    "outputDirectory": "./dist",
+    "sourceDirectory": "./src",
+    "logLevel": "WARN",
+    "variables": {
+        "UNSUBSCRIBE": "__UNSB__"
+    }
+}
