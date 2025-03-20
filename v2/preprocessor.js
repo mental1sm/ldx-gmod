@@ -210,7 +210,7 @@ function groupProps(node) {
         node.commonProps = {}
         node.reactiveProps = {}
         node.sharedProps = {}
-        Object.entries(node.props).map(([propName, propContent]) => {
+        Object.entries(node.props).forEach(([propName, propContent]) => {
             if (propContent && propContent.value && propContent.value.match('@')) {
                 // Need to find reactive variables
                 const reactiveDependencies = propContent.value.match(/@[a-zA-Z0-9._]+\b/g)
