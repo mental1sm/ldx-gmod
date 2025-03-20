@@ -9,28 +9,25 @@
 // File start
 start
   = WS nodes:( (externalCodeDef / componentDef) WS )* eof {
-        console.dir(nodes, { depth: null });
+        console.dir(nodes.map(n => n[0]), { depth: null });
         return nodes.map(n => n[0]); 
   }
 
 
 componentDef
-    = externalCode:(externalCode WS)? "Component" WS name:[A-Za-z0-9]+ WS "=" WS "{" WS inlineBefore:inlineCode? WS elements:element* WS inlineAfter:inlineCode? WS "}" {
-        console.log(name.join(''))
+    = externalCode:(externalCode WS)? "Component" WS name:[A-Za-z0-9]+ WS "=" WS "{" WS inlineBefore:inlineCode* WS elements:element* WS inlineAfter:inlineCode* WS "}" {
         const tree = {
             component: name.join(''),
-            body: {
-                codeBefore: inlineBefore,
-                elements: elements,
-                codeAfter: inlineAfter,
-            }};
+            type: 'component',
+            elements: [...inlineBefore, ...elements, ...inlineAfter],
+        }
 
          return tree
     }
 
 externalCodeDef
-    = code:externalCode {
-        return { code: code };
+    = code:externalCode {        
+        return { type: 'external', code: code };
     }
 
 externalCode
@@ -41,13 +38,14 @@ element
     { 
         return { 
             tag: tag,
+            type: 'element',
             subscriptions: subscriptions.map(s => s[1]), 
             props: Object.fromEntries(props), 
             children: children.map(c => c[1]) 
         }; 
     }
     / "<" tag:tagName subscriptions:subscription* props:prop* WS "/>"
-    { return { tag: tag, props: Object.fromEntries(props), children: [], subscriptions: subscriptions }; }
+    { return { tag: tag, type: 'element', props: Object.fromEntries(props), children: [], subscriptions: subscriptions }; }
     / inlineCode
     / ifBlock
     / mapBlock
@@ -85,10 +83,10 @@ tagName
     = [A-Za-z]+ { return text(); }
 
 prop 
-    = WS name:[a-zA-Z]+ "=" value:value { return [name.join(''), {type: 'default', value: value}]; }
-    / WS name:[a-zA-Z]+ "=~" value:value { return [name.join(''), {type: 'classFunc', value: value}]; }
-    / WS name:[a-zA-Z]+ "=:" value:value { return [name.join(''), {type: 'property', value: value}]; }
-    / WS name:[a-zA-Z]+ "=+" value:value { return [name.join(''), {type: 'func', value: value}]; }
+    = WS name:[a-zA-Z]+ "=" value:value { return [name.join(''), {variant: 'default', value: value}]; }
+    / WS name:[a-zA-Z]+ "=~" value:value { return [name.join(''), {variant: 'classFunc', value: value}]; }
+    / WS name:[a-zA-Z]+ "=:" value:value { return [name.join(''), {variant: 'property', value: value}]; }
+    / WS name:[a-zA-Z]+ "=+" value:value { return [name.join(''), {variant: 'func', value: value}]; }
     / WS name:[a-zA-Z]+ { return [name.join(''), null]; }
 
 value
@@ -100,13 +98,13 @@ WS "whitespace" = [ \t\r\n]*
 
 inject
     = "INJECT(" WS name:[A-Za-z]+ WS ")"
-    { return { type: "inject", name: name.join(""), arg: "LDX_INPUT_ARGS" }; }
+    { return { type: "inject", name: name.join(""), arg: "LDX_INPUT_ARGS", code: `${name.join("")}(LDX_INPUT_ARGS, $PARENT)` }; }
 
 ifBlock
     = "IF(" condition:[^)]+ ")" WS "[" WS elements:(element WS)* WS "]" {
         return { 
             type: "if", 
-            condition: condition.join(''), 
+            body: condition.join(''), 
             children: elements.map(e => e[0]),
             
         };
@@ -116,7 +114,7 @@ mapBlock
     = "MAP(" iterable:[^)]+ ")" WS "[" WS elements:(element WS)* WS "]" {
         return { 
             type: "map", 
-            iterable: iterable.join(''), 
+            body: iterable.join(''), 
             children: elements.map(e => e[0]) 
         };
     }

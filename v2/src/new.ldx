@@ -6,12 +6,12 @@ end
 }
 
 Component TestMenu = { 
-    {local counter = useState(0);}
+    {local counter = useState(0)}
     <DFrame
         id={"root"} size={500, 700} popup
         pos={0, 0} title={""} draggable={false}>            
             MAP({0,0,0,0,0}) [
-                <DLabel @counter!& key={$INDEX} pos={150, 40} size={200, 100} sizeToContents setText={@counter.value} />
+                <DLabel @counter!& key={$INDEX} pos={150 * 0.5 * $PARENT, 40} size={200, 100} sizeToContents setText={@counter.value} />
             ]
             <DButton size={200, 60} pos={300, 300} setText={"Increase counter"} 
             doClick={function() 
@@ -20,6 +20,13 @@ Component TestMenu = {
             />
             {local a = 5}
             <DLabel size={default} pos=~{classFunc} setText=:{property} alignBottom=+{func} center />
+            USE_EFFECT(function()
+                print("Mounted")
+                return function()
+                    print("Unmounted")
+                end
+            end, {counter})
+            INJECT(NotableMenu)
     </DFrame>
 }
 
