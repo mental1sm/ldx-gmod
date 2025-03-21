@@ -1,6 +1,6 @@
 const fs = require('fs');
-const config = JSON.parse(fs.readFileSync('config.json', 'utf8'));
-const mappingConfig = JSON.parse(fs.readFileSync('derma-mappings.json', 'utf8'));
+const config = JSON.parse(fs.readFileSync('../config.json', 'utf8'));
+const mappingConfig = JSON.parse(fs.readFileSync('../derma-mappings.json', 'utf8'));
 
 // === Lua Generation Types ===
 const types = {
@@ -43,6 +43,25 @@ function getInheritedAttributes(tag, mappings) {
     return Array.from(result);
 }
 
+const getMappings = (tag) => {
+    // Array of inherited atts ['...', '...']
+    const inheritedAttrs = getInheritedAttributes(tag, mappingConfig);
+    // {attr: { method: '...', mapType: [Function: ...] }
+    return Object.fromEntries(inheritedAttrs.map(attr => [attr, baseMappings[attr]]))
+}
+
+const generateProps = (varName, tag, props) => {
+    const mappings = getMappings(tag)
+    return Object.entries(props).map(([propName, propContent]) => {
+        const propMapping = mappings[propName]
+        !propContent.variant || propContent.variant === 'default' ? {} : propMapping.mapType = types[propContent.variant]
+        return propMapping.mapType(varName, propMapping.method, propContent.value)
+    })
+}
+
 module.exports.getInheritedAttributes = getInheritedAttributes
 module.exports.baseMappings = baseMappings
 module.exports.dermaMappings = dermaMappings
+module.exports.propMappers = types
+module.exports.getMappings = getMappings
+module.exports.generateProps = generateProps

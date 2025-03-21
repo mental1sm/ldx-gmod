@@ -4,10 +4,21 @@ const peggy = require('peggy');
 const logger = require('./util/logger')
 const scanner = require('./util/scanner')
 
+// ----------------------------------------------------------------------
+// Preprocessing
+const preprocessor = require('./preprocessing/preprocessor')
+const grammar = fs.readFileSync('./preprocessing/ldx.pegjs', 'utf8')
+
+// Codegen
+const codegen = require('./codegen/codegen')
+
+// Postprocessing
+const identMasterGrammar = fs.readFileSync('./postprocessing/ident.pegjs', 'utf8')
+// ----------------------------------------------------------------------
 
 const config = JSON.parse(fs.readFileSync('config.json', 'utf8'));
-const grammar = fs.readFileSync('ldx.pegjs', 'utf8')
 const parser = peggy.generate(grammar)
+const identMaster = peggy.generate(identMasterGrammar)
 
 
 
@@ -25,8 +36,11 @@ async function parseLDX(inputFile) {
         const ldxContent = await fs.promises.readFile(inputFile, 'utf8');
         let result;
         result = parser.parse(ldxContent);
+        const preparedTree = preprocessor.preprocessingPipeline(result)
+        const generatedCode = codegen.generateCode(preparedTree)
+        const prettifiedCode = identMaster.parse(generatedCode)
 
-        await fs.promises.writeFile(outputFile, JSON.stringify(result));
+        await fs.promises.writeFile(outputFile, prettifiedCode);
         logger.info(`Generated ${outputFile}`);
     } 
     catch (e) {

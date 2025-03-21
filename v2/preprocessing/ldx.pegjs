@@ -9,7 +9,6 @@
 // File start
 start
   = WS nodes:( (externalCodeDef / componentDef) WS )* eof {
-        console.dir(nodes.map(n => n[0]), { depth: null });
         return nodes.map(n => n[0]); 
   }
 

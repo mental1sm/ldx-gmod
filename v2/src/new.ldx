@@ -9,7 +9,7 @@ Component TestMenu = {
     {local counter = useState(0)}
     <DFrame
         id={"root"} size={500, 700} popup
-        pos={0, 0} title={""} draggable={false}>            
+        pos={0, 0} setTitle={""} draggable={false}>            
             MAP({0,0,0,0,0}) [
                 <DLabel @counter!& key={$INDEX} pos={150 * 0.5 * $PARENT, 40} size={200, 100} sizeToContents setText={@counter.value} />
             ]
@@ -34,7 +34,7 @@ Component NotableMenu = {
     {local counter = useState(0);}
     <DFrame
         id={"root"} size={500, 700} popup
-        pos={0, 0} title={""} draggable={false}>            
+        pos={0, 0} setTitle={""} draggable={false}>            
     </DFrame>
 } 
 

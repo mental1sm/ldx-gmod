@@ -2,6 +2,7 @@ if SERVER then
     AddCSLuaFile()
 end
 
+// Move subscribers out of state to avoid access to subscribers
 function useState(initialValue)
     local state = { value = initialValue, subscribers = {} }
 
@@ -13,16 +14,17 @@ function useState(initialValue)
 
         for _, callback in pairs(state.subscribers) do
             if callback then
-                callback(state)
+                local err = not pcall(function () callback(state) end)
+                if err then state.subscribers[callback] = nil end
             end
         end
     end
 
     function state.subscribe(callback)
-        state.subscribers[callback] = true
+        state.subscribers[callback] = callback
 
         return function()
-            state.subscribers[callback] = false
+            state.subscribers[callback] = nil
         end
     end
 
