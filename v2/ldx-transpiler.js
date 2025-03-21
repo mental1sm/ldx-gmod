@@ -1,8 +1,8 @@
 const fs = require('fs');
 const path = require('path');
 const peggy = require('peggy');
-const logger = require('../util/logger')
-const scanner = require('../util/scanner')
+const logger = require('./util/logger')
+const scanner = require('./util/scanner')
 
 
 const config = JSON.parse(fs.readFileSync('config.json', 'utf8'));

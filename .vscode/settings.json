@@ -23,5 +23,17 @@
 	    "//"
     ],
     "Lua.runtime.version": "Lua 5.1",
-    "ldx.enableLuaCompletion": true
+    "ldx.enableLuaCompletion": true,
+    "[go]": {
+        "editor.formatOnSave": false,
+        "editor.formatOnType": false,
+        "editor.formatOnPaste": false,
+        
+    },
+    "gopls": {
+        "ui.diagnostic.analyses": {
+            "structtag": false,
+            "unusedvariable": false
+        }
+    }
 }

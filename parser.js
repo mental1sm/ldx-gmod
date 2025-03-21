@@ -1,10 +1,10 @@
 const fs = require('fs');
 const path = require('path');
 const peggy = require('peggy');
-const logger = require('./util/logger')
-const scanner = require('./util/scanner')
-const minify = require('./util/minify')
-const renamer = require('./util/renamer')
+const logger = require('./v2/util/logger')
+const scanner = require('./v2/util/scanner')
+const minify = require('./v2/postprocessing/minify')
+const renamer = require('./v2/postprocessing/renamer')
 
 const config = JSON.parse(fs.readFileSync('config.json', 'utf8'));
 const grammar = fs.readFileSync('ldx.pegjs', 'utf8')

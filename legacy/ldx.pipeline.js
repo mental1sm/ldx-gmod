@@ -1,10 +1,10 @@
 const fs = require('fs');
-const logger = require('./util/logger')
+const logger = require('../v2/util/logger')
 const config = JSON.parse(fs.readFileSync('config.json', 'utf8'));
 const mappingConfig = JSON.parse(fs.readFileSync('derma-mappings.json', 'utf8'));
 
-const ldxAliaser = require('./util/ldx-aliaser')
-const ldxInheritance = require('./util/ldx-inheritance')
+const ldxAliaser = require('../v2/postprocessing/ldx-aliaser')
+const ldxInheritance = require('../v2/util/ldx-inheritance')
 
 // === Global State ===
 const identifiedComponents = [];
