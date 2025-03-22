@@ -7,52 +7,79 @@ const SNIPPETS = Object.freeze({
     CREATE_EMPTY_TABLE: "CREATE_EMPTY_TABLE", // isLocal? name
     CREATE_UPDATE_FUNCTION: "CREATE_UPDATE_FUNCTION", // name elementName elementTag reactiveDependency reactiveProps
     SUBSCRIBE: "SUBSCRIBE", // name elementName reactiveDependency updateCallbackName
-    REDEFINE_ON_REMOVE: "REDEFINE_ON_REMOVE", // componentName body
+    CREATE_ON_REMOVE_UNSUBSCRIBE_HANDLER: "CREATE_ON_REMOVE_UNSUBSCRIBE_HANDLER", // elementName unsubscribeName customize,
     CALL_CLASS_METHOD: "CALL_CLASS_METHOD", // class name args
     CALL_FUNCTION: "CALL_FUNCTION", // name args
     REDEFINE_PROPERTY: "REDEFINE_PROPERTY", // class property value,
-    ADD_ITEM_TO_TABLE: "ADD_ITEM_TO_TABLE" // table key value
+    ADD_ITEM_TO_TABLE: "ADD_ITEM_TO_TABLE", // table key valueб
+    USE_EFFECT: "USE_EFFECT" // name body deps
   })
 
-const generateCreateFunction = (snippetArgs) => {
-    return `local ${snippetArgs.name} = function(${snippetArgs.args})\n`
+const generateCreateFunction = (args) => {
+    return `local ${args.name} = function(${args.args})\n`
 }
 
-const generateEndSomething = (snippetArgs) => {
+const generateEndSomething = (args) => {
     return `end\n`
 }
 
-const generateCreateVariable = (snippetArgs) => {
-    return snippetArgs.isLocaL ? `local ${snippetArgs.name} = ${snippetArgs.value}\n` : `${snippetArgs.name} = ${snippetArgs.value}\n`
+const generateCreateVariable = (args) => {
+    return args.isLocaL ? `local ${args.name} = ${args.value}\n` : `${args.name} = ${args.value}\n`
 }
 
-const generateCreateEmptyTable = (snippetArgs) => {
-    return snippetArgs.isLocaL ? `local ${snippetArgs.name} = {}` : `${snippetArgs.name} = {}\n`
+const generateCreateEmptyTable = (args) => {
+    return args.isLocaL ? `local ${args.name} = {}` : `${args.name} = {}\n`
 }
 
-const generateCreateUpdateFunction = (snippetArgs) => {
-    return `
-    ${snippetArgs.name} = function(self, ${reactiveDependency})
-        ${mappingInheritanceMaster.generateProps(snippetArgs.elementName, snippetArgs.elementTag, snippetArgs.reactiveProps).join('')} 
-    end\n
-    `
+const generateCreateUpdateFunction = (args) => {
+    console.log(args)
+    return `${args.name} = function(${args.reactiveDependency})
+        ${mappingInheritanceMaster.generateProps(args.elementName, args.elementTag, args.reactiveProps).join('\n')} 
+    end\n`
 }
 
-const generateCreateSubscribe = (snippetArgs) => {
-    return `
-    ${snippetArgs.name} = function(self, ${snippetArgs.reactiveDependency})
-        ${snippetArgs.elementName}:${snippetArgs.updateCallbackName}(${snippetArgs.reactiveDependency})
-    end\n
-    `
+const generateCreateSubscribe = (args) => {
+    console.log(args)
+    return `${args.name} = ${args.reactiveDependency}.subscribe(function(state)
+        ${args.elementName}:${args.updateCallbackName}(state)
+    end, true, 
+    function() 
+        return IsValid(${args.elementName}) 
+    end)\n`
 }
 
-const generateRedefineOnRemove = (snippetArgs) => {
-    return `
-    ${snippetArgs.elementName}.OnRemove = function(self)
-        ${snippetArgs.body}
-    end\n
-    `
+const generateCReateOnRemoveUnsubHandler = (args) => {
+    return `${args.elementName}.OnRemove = function(self)
+        ${Object.values(args.children).map(child => generateSnippet(child))}
+        for _, _u in pairs(${args.unsubscribeName}) do
+            _u()
+        end
+        ${args.customization}
+    end`
 }
+
+const generateCallClassMethod = (args) => {
+    const joinedArgs = args.args ? args.args.join(', ') : ''
+    return `${args.class}:${args.name}(${joinedArgs})\n`
+}
+
+const generateCallFunction = (args) => {
+    const joinedArgs = args.args ? args.args.join(', ') : ''
+    return `${args.name}(${joinedArgs})\n`
+}
+
+const generateRedefineProperty = (args) => {
+    return `${args.class}.${args.property} = ${args.value}\n`
+}
+
+const generateAddItemToTable = (args) => {
+    return `${args.table}[${args.key}] = ${args.value}\n`
+}
+
+const generateUseEffect = (args) => {
+    return `local ${args.name} = useEffect(${args.body}, {${args.deps}})()\n`
+}
+
 
 const snippetMappings = {
     CREATE_FUNCTION: generateCreateFunction,
@@ -61,11 +88,12 @@ const snippetMappings = {
     CREATE_EMPTY_TABLE: generateCreateEmptyTable,
     CREATE_UPDATE_FUNCTION: generateCreateUpdateFunction,
     SUBSCRIBE: generateCreateSubscribe,
-    REDEFINE_ON_REMOVE: generateRedefineOnRemove,
-    CALL_CLASS_METHOD: () => '',
-    CALL_FUNCTION: () => '',
-    REDEFINE_PROPERTY: () => '',
-    ADD_ITEM_TO_TABLE: () => '' 
+    CREATE_ON_REMOVE_UNSUBSCRIBE_HANDLER: generateCReateOnRemoveUnsubHandler,
+    CALL_CLASS_METHOD: generateCallClassMethod,
+    CALL_FUNCTION: generateCallFunction,
+    REDEFINE_PROPERTY: generateRedefineProperty,
+    ADD_ITEM_TO_TABLE: generateAddItemToTable,
+    USE_EFFECT: generateUseEffect
 }
 
 const generateSnippet = (snippet) => {

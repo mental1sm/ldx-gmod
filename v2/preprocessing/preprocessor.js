@@ -9,6 +9,9 @@ const MAP_ITEM_ALIAS = "$ITEM"
 const MAP_INDEX_ALIAS = "$INDEX"
 
 const UNSUBSCRIBE_ARRAY = "__UNSB__"
+const UNSUBSCRIBE_AFFIX = "__unsb__"
+const UPDATE_METHOD_AFFIX = "__update__"
+const MAP_VARIABLE_STORE_AFFIX = "__mvs__"
 
 const METADATA_UPDATE_ALL_PROPS = '!'
 const METADATA_INVALIDATE_CHILDREN = '&'
@@ -20,7 +23,8 @@ const SNIPPETS = snippetGenerator.SNIPPETS
 
 const DEFAULT_CONTEXT = Object.freeze({
   inFor: false,
-  isRoot: false
+  isRoot: false,
+  isLocal: true
 })
 
 const INTERNAL_PROPS = [
@@ -75,11 +79,16 @@ function replaceParentAlias(node) {
     if (node.type === 'element') {
         // Replace also in the element props
         Array.from([node.commonProps, node.reactiveProps, node.internalProps]).forEach(props => {
-          Object.entries(props).forEach(([propName, propContent]) => {
+          Object.entries(props).forEach(([_, propContent]) => {
             propContent.value ? propContent.value = propContent.value.replaceAll(PARENT_ALIAS, node.parent) : propContent
-            return {propName: propContent}
           })
         })
+    }
+    if (node.type === 'snippet') {
+      node.args = Object.entries(node.args).reduce((acc, [argName, argValue]) => {
+        acc[argName] = typeof argValue === 'string' ? argValue.replaceAll(PARENT_ALIAS, node.parent) : argValue
+        return acc
+      }, {})
     }
     if (node.children) node.children.forEach(child => {replaceParentAlias(child)})
 }
@@ -89,19 +98,29 @@ function replaceMapAliases(node) {
     if (node.type === 'map') {
         // pass
     }
+    if (node.type === 'if' && node.context.inFor) {
+      node.body = node.body.replaceAll(MAP_INDEX_ALIAS, INDEX_PREFIX).replaceAll(MAP_ITEM_ALIAS, ITEM_PREFIX)
+    }
     // Replace MAP aliases only if they inside of directive
     if (node.type === 'element' && node.context.inFor) {
+      node.varName = node.varName.replaceAll(MAP_INDEX_ALIAS, INDEX_PREFIX).replaceAll(MAP_ITEM_ALIAS, ITEM_PREFIX)
       Array.from([node.commonProps, node.reactiveProps, node.internalProps]).forEach(props => {
-        Object.entries(props).forEach(([propName, propContent]) => {
+        Object.entries(props).forEach(([_, propContent]) => {
           propContent.value ? propContent.value = propContent.value.replaceAll(MAP_INDEX_ALIAS, INDEX_PREFIX) : propContent
           propContent.value ? propContent.value = propContent.value.replaceAll(MAP_ITEM_ALIAS, ITEM_PREFIX) : propContent
-          return {propName: propContent}
         })
       })
     }
     if (node.type === 'inline' && node.context.inFor) {
       node.code = node.code.replaceAll(MAP_INDEX_ALIAS, INDEX_PREFIX).replaceAll(MAP_ITEM_ALIAS, ITEM_PREFIX)
     }
+    if (node.type === 'snippet' && node.context.inFor) {
+      node.args = Object.entries(node.args).reduce((acc, [argName, argValue]) => {
+        acc[argName] = typeof argValue === 'string' ? 
+        argValue.replaceAll(MAP_INDEX_ALIAS, INDEX_PREFIX).replaceAll(MAP_ITEM_ALIAS, ITEM_PREFIX) : argValue
+        return acc
+      }, {})
+    } 
     if (node.children) node.children.forEach(child => {replaceMapAliases(child)})
 }
 
@@ -128,7 +147,7 @@ function groupProps(node) {
                 // Then we need to calculate which state this prop depends on
                 reactiveDependencies.map(dep => {
                     const rootDependency = dep.match('.') ? dep.split('.')[0] : dep
-                    node.reactiveProps[propName].dependencies.push(rootDependency)
+                    node.reactiveProps[propName].dependencies.push(rootDependency.replace('@', ''))
                 })
             }
             else {
@@ -233,7 +252,7 @@ function handleNoLocal(node) {
 
 function applyRecursivly(node, effect) {
     effect(node)
-    if (node.children && node.children.length) node.children.forEach(child => {applyRecursivly(child, effect)})
+    if (node.children) node.children.forEach(child => {applyRecursivly(child, effect)})
 }
 
 // Declares for each root component table of subscribtions and then redefines them OnRemove property to handle unsubscriptions
@@ -242,10 +261,13 @@ function handleUnsubscription(tree) {
     if (rootNode.type === 'component') {
       const rootElement = findRootElement(rootNode)
       const subscribtionTable = makeSnippet(SNIPPETS.CREATE_EMPTY_TABLE, {name: UNSUBSCRIBE_ARRAY, isLocal: true})
+      subscribtionTable.context = {...DEFAULT_CONTEXT}
       
       // If root onRemove was customized by user so we need to integrate customization at the OnRemove property
       const rootOnRemove = rootElement.commonProps.onRemove || rootElement.reactiveProps.onRemove
-      const onComponentRemove = makeSnippet(SNIPPETS.REDEFINE_ON_REMOVE, {elementName: rootElement.varName, body: rootOnRemove ? rootOnRemove : ''})
+      const onComponentRemove = makeSnippet(SNIPPETS.CREATE_ON_REMOVE_UNSUBSCRIBE_HANDLER, 
+        {elementName: rootElement.varName, unsubscribeName: UNSUBSCRIBE_ARRAY, customization: rootOnRemove ? rootOnRemove : '', children: []})
+      onComponentRemove.context = {...DEFAULT_CONTEXT}
       rootNode.elements = [subscribtionTable, ...rootNode.elements, onComponentRemove]
     }
   })
@@ -257,33 +279,74 @@ function defineRootElement(component) {
   if (rootElement) rootElement.context.isRoot = true
 }
 
+// We need to save variables inside of map using the way of saving them into the prepared table
+function manageMapVariables(node) {
+  if (node.type === 'map') {
+    const mapVariableStoreName = `${MAP_VARIABLE_STORE_AFFIX}${varCounter++}`
+    const mapVariableStore = makeSnippet(SNIPPETS.CREATE_EMPTY_TABLE, {isLocal: true, name: mapVariableStoreName})
+    mapVariableStore.context = {...DEFAULT_CONTEXT}
+    node.context.pushNodeToParentChildrenSectionBegin(mapVariableStore)
+    applyRecursivly(node, (child) => {child.context.mapActualStore = mapVariableStoreName})
+  }
+  if (node.type === 'element' && node.context.inFor) {
+    node.varName = `${node.context.mapActualStore}[$INDEX]`
+    node.context.isLocal = false
+  }
+  if (node.children) node.children.forEach(child => {manageMapVariables(child)})
+}
+
+// We need to generate unique subscription key, subscribe to dependency and then insert into the unsub storage concrete unsub functions
 function createSubscriptions(node) {
   if (node.type === 'element') {
-      const reactiveOriginDeps = node.subscriptions.map(sub => {
-      sub.name = '@' + sub.name
-      return sub
-    })
+      const reactiveOriginDeps = node.subscriptions
 
     reactiveOriginDeps.map(rod => {
-      const keyProp = Object.entries(node.internalProps).find(([key, val]) => key === 'key')
+      const keyProp = Object.entries(node.internalProps).find(([key, _]) => key === 'key')
 
-      const underlayingReactiveProps = Object.entries(node.reactiveProps).filter(([propName, propContent]) => propContent.dependencies.includes(rod.name))
+      const underlayingReactiveProps = Object.fromEntries(Object.entries(node.reactiveProps).filter(([_, propContent]) => propContent.dependencies.includes(rod.name)))
 
       // elementName reactiveDependency reactiveProps
-      const updateFunctionName = `${node.varName}.__update__${rod.value}`
-      const updateFunctionSnippet = makeSnippet(SNIPPETS.CREATE_UPDATE_FUNCTION, {name: updateFunctionName, elementName: node.varName, elementTag: node.tag, reactiveDependency: rod.name, reactiveProps: underlayingReactiveProps})
+      const updateFunctionName = `${UPDATE_METHOD_AFFIX}${rod.name}`
+      const updateFunctionRedefine = `${node.varName}.${updateFunctionName}`
+      const updateFunctionSnippet = makeSnippet(SNIPPETS.CREATE_UPDATE_FUNCTION, {name: updateFunctionRedefine, elementName: node.varName, elementTag: node.tag, reactiveDependency: rod.name, reactiveProps: underlayingReactiveProps})
       node.context.pushNodeToParentChildrenSectionEnd(updateFunctionSnippet)
 
       // uniqueName elementName reactiveDependency key?
-      const unsubscriptionName = `__UNSB__["__unsb__${node.varName}_${rod.value}"${keyProp ? ` .. ${keyProp[1].value}` : '' }]`
-      const subscriptionSnippet = makeSnippet(SNIPPETS.SUBSCRIBE, {name: unsubscriptionName, elementName: node.varName, reactiveDependency: rod.name, updateCallbackName: updateFunctionName})
+      const unsubscriptionName = `${UNSUBSCRIBE_ARRAY}["${UNSUBSCRIBE_AFFIX}${node.varName}_${rod.name}"${keyProp ? ` .. ${keyProp[1].value}` : '' }]`
+      const subscriptionSnippet = makeSnippet(SNIPPETS.SUBSCRIBE, 
+        {name: unsubscriptionName, elementName: node.varName, reactiveDependency: rod.name, updateCallbackName: updateFunctionName})
       node.context.pushNodeToParentChildrenSectionEnd(subscriptionSnippet)
     })
   }
   if (node.children) node.children.forEach(child => {createSubscriptions(child)})
 }
 
+// Injects all effect cleanups into the root:OnRemove method
+function injectEffectUnsubs(node) {
+  if (node.type === 'component') {
+    const root = findRootElement(node)
+    const rootEffects = root.children.filter(n => n.type === 'use_effect')
+    const unmountSnippets = node.elements.filter(n => n.type === 'snippet' && n.variant === SNIPPETS.CREATE_ON_REMOVE_UNSUBSCRIBE_HANDLER && n.args.elementName === root.varName)
+    if (unmountSnippets.length > 0) {
+      const rootUnmountSnippet = unmountSnippets[0]
+      rootUnmountSnippet.args.children = [...rootUnmountSnippet.args.children, ...rootEffects.map(effect => makeSnippet(SNIPPETS.CALL_FUNCTION, {name: effect.varName}))]
+    }
+  }
+  if (node.children) node.children.forEach(child => {injectEffectUnsubs(child)})
+}
+
+// Finds all useEffects and transform them into snippets which will be pushed at the end of root
+function handleUseEffects(node) {
+  if (node.type === 'use_effect') {
+    const useEffectSnippet = makeSnippet(SNIPPETS.USE_EFFECT, {name: node.varName, body: node.body, deps: node.dependencies})
+    useEffectSnippet.context = {...DEFAULT_CONTEXT}
+    node.context.pushNodeToParentChildrenSectionEnd(useEffectSnippet)
+  }
+  if (node.children) node.children.forEach(child => {handleUseEffects(child)})
+}
+
 function preprocessingPipeline(tree) {
+    // ------------ EARLY STAGE -------------------------------------
     // Define context on preprocessing
     tree.forEach(rootNode => {
         if (rootNode.type === 'component') {
@@ -292,13 +355,6 @@ function preprocessingPipeline(tree) {
             rootNode.elements.forEach(element => {analyzeContext(element)})
         }
     });
-
-    // Scan tree and marks root element in context
-    tree.forEach(rootNode => {
-      if (rootNode.type === 'component') {
-        defineRootElement(rootNode)
-      }
-    })
 
     // Handle nolocal directive
     tree.forEach(rootNode => {
@@ -322,13 +378,14 @@ function preprocessingPipeline(tree) {
         rootNode.parent = "NOPARRENT"
     })
 
-    // Define root elements
+    // Scan tree and marks root element in context
     tree.forEach(rootNode => {
       if (rootNode.type === 'component') {
         defineRootElement(rootNode)
       }
     })
 
+    // -------------- MIDDLE STAGE ----------------
     // Group props by reactive & common
     tree.forEach(rootNode => {
       if (rootNode.type === 'component') {
@@ -336,14 +393,34 @@ function preprocessingPipeline(tree) {
       }
     })
 
+    // Create table to store iterable elements inside of mab
+    tree.forEach(rootNode => {
+      if (rootNode.type === 'component') {
+        rootNode.elements.forEach(element => manageMapVariables(element))
+      }
+    })
+
+    // ---------- LATE STAGE ----------------
+    // Generates useEffect snippets at the end of component and call it
+    tree.forEach(rootNode => {
+      if (rootNode.type === 'component') {
+        rootNode.elements.forEach(element => {handleUseEffects(element)})
+      }
+    })
+
     // Generates snippets to handle unsubscription
     handleUnsubscription(tree)
 
+    // Injects useEffect cleanup callbacks to root:OnRemove
+    tree.forEach(rootNode => {injectEffectUnsubs(rootNode)})
+
+    // Create subscriptions for reactive variables
     tree.forEach(rootNode => {
       if (rootNode.type === 'component') {
         rootNode.elements.forEach(element => {createSubscriptions(element)})
       }
     })
+
 
     // Replace aliases
     tree.forEach(rootNode => {
@@ -354,16 +431,7 @@ function preprocessingPipeline(tree) {
     })
 
     console.dir(tree, { depth: null });
-
-    // Undefine context after preprocessing
-    // tree.forEach(rootNode => {
-    //     if (rootNode.type === 'component') {
-    //         rootNode.elements.forEach(element => {applyRecursivly(element, (element) => {delete element.context} )})
-    //     }
-    // });
     return tree
 }
 
 module.exports.preprocessingPipeline = preprocessingPipeline
-
-// preprocessingPipeline(test)

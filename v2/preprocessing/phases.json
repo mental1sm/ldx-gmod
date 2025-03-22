@@ -1,0 +1,15 @@
+{
+    "initContext": [],
+    "analyzeContext": ["initContext"],
+    "handleNoLocal": ["initContext"],
+    "defineVarName": ["initContext", "handleNoLocal"],
+    "defineParent": ["defineVarName"],
+    "defineRootElement": ["defineParent"],
+    "groupProps": ["initContext"],
+    "manageMapVariables": ["defineVarName", "analyzeContext"],
+    "handleUnsubscription": ["defineRootElement"],
+    "createSubscriptions": ["groupProps", "handleUnsubscription"],
+    "replaceParentAlias": ["defineParent"],
+    "replaceMapAliases": ["analyzeContext", "manageMapVariables"]
+  }
+  

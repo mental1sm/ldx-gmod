@@ -1,67 +1,88 @@
 const fs = require('fs');
-const config = JSON.parse(fs.readFileSync('../config.json', 'utf8'));
-const mappingConfig = JSON.parse(fs.readFileSync('../derma-mappings.json', 'utf8'));
 
-// === Lua Generation Types ===
-const types = {
-    func: (varName, method, value) => `${varName}.${method}(${value || ''})\n`,
-    classFunc: (varName, method, value) => `${varName}:${method}(${value || ''})\n`,
-    property: (varName, method, value) => `${varName}.${method} = ${value ? value.replace(/^\s+|\s+$/g, '') : 'function() end'}\n`, // trim spaces at the start & end of value
+// ==== CONFIG PARSING ====
+const config = JSON.parse(fs.readFileSync('../config.json', 'utf8'));
+const mappingData = JSON.parse(fs.readFileSync('../derma-mappings.json', 'utf8'));
+
+// ==== MAPPING STRATEGIES ====
+const mappingStrategies = {
+    func: (varName, method, value) => `${varName}.${method}(${value || ''})`,
+    classFunc: (varName, method, value) => `${varName}:${method}(${value || ''})`,
+    property: (varName, method, value) => {
+        const trimmed = value ? value.trim() : 'function() end';
+        return `${varName}.${method} = ${trimmed}`;
+    }
 };
 
-const baseMappings = Object.fromEntries(
-    Object.entries(mappingConfig.baseMappings).map(([key, val]) => [
-        key,
-        { ...val, mapType: types[val.mapType] },
+// ==== BASE PROP MAPPINGS ====
+const basePropMappings = Object.fromEntries(
+    Object.entries(mappingData.baseMappings).map(([propName, def]) => [
+        propName,
+        { ...def, mapType: mappingStrategies[def.mapType] }
     ])
 );
 
-const dermaMappings = Object.fromEntries(
-    Object.entries(mappingConfig.dermaMappings).map(([tag, propNames]) => [
+// ==== DERMA-TYPE TO PROP MAP ====
+const dermaPropMappings = Object.fromEntries(
+    Object.entries(mappingData.dermaMappings).map(([tag, propNames]) => [
         tag,
-        Object.fromEntries(propNames.map(name => [name, baseMappings[name]])),
+        Object.fromEntries(
+            propNames.map(name => [name, basePropMappings[name]])
+        )
     ])
 );
 
-function getInheritedAttributes(tag, mappings) {
-    const result = new Set();
-    
-    function collectDermaAttributes(currentTag) {
-        if (!currentTag || !mappings.inheritance[currentTag]) return;
+// ==== INHERITANCE RESOLUTION ====
+function getInheritedPropNames(dermaTag) {
+    const collected = new Set();
 
-        if (mappings.dermaMappings[currentTag]) {
-            mappings.dermaMappings[currentTag].forEach(attr => result.add(attr));
+    function collect(tag) {
+        if (!tag || !mappingData.inheritance[tag]) return;
+
+        if (mappingData.dermaMappings[tag]) {
+            mappingData.dermaMappings[tag].forEach(attr => collected.add(attr));
         }
 
-        const parents = mappings.inheritance[currentTag];
+        const parents = mappingData.inheritance[tag];
         if (parents) {
-            parents.forEach(parent => collectDermaAttributes(parent));
+            parents.forEach(collect);
         }
     }
-    
-    collectDermaAttributes(tag);
-    return Array.from(result);
+
+    collect(dermaTag);
+    return Array.from(collected);
 }
 
-const getMappings = (tag) => {
-    // Array of inherited atts ['...', '...']
-    const inheritedAttrs = getInheritedAttributes(tag, mappingConfig);
-    // {attr: { method: '...', mapType: [Function: ...] }
-    return Object.fromEntries(inheritedAttrs.map(attr => [attr, baseMappings[attr]]))
+// ==== MAPPING RESOLVER FOR A TAG ====
+function getPropMappingsForTag(tag) {
+    const inheritedProps = getInheritedPropNames(tag);
+    return Object.fromEntries(
+        inheritedProps.map(propName => [propName, basePropMappings[propName]])
+    );
 }
 
-const generateProps = (varName, tag, props) => {
-    const mappings = getMappings(tag)
-    return Object.entries(props).map(([propName, propContent]) => {
-        const propMapping = mappings[propName]
-        !propContent.variant || propContent.variant === 'default' ? {} : propMapping.mapType = types[propContent.variant]
-        return propMapping.mapType(varName, propMapping.method, propContent.value)
-    })
+// ==== PROP GENERATOR ====
+function generateProps(varName, tag, props) {
+    const mappings = getPropMappingsForTag(tag);
+
+    return Object.entries(props).map(([propName, propData]) => {
+        const mapping = mappings[propName];
+        if (!mapping) return '';
+
+        const strategy = propData.variant && propData.variant !== 'default'
+            ? mappingStrategies[propData.variant]
+            : mapping.mapType;
+
+        return strategy(varName, mapping.method, propData.value);
+    }).filter(Boolean); // remove empty
 }
 
-module.exports.getInheritedAttributes = getInheritedAttributes
-module.exports.baseMappings = baseMappings
-module.exports.dermaMappings = dermaMappings
-module.exports.propMappers = types
-module.exports.getMappings = getMappings
-module.exports.generateProps = generateProps
+// ==== EXPORTS ====
+module.exports = {
+    getInheritedPropNames,
+    getPropMappingsForTag,
+    generateProps,
+    basePropMappings,
+    dermaPropMappings,
+    mappingStrategies
+};

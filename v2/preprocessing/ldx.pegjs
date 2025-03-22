@@ -14,11 +14,11 @@ start
 
 
 componentDef
-    = externalCode:(externalCode WS)? "Component" WS name:[A-Za-z0-9]+ WS "=" WS "{" WS inlineBefore:inlineCode* WS elements:element* WS inlineAfter:inlineCode* WS "}" {
+    = externalCode:(externalCode WS)? "Component" WS name:[A-Za-z0-9]+ WS "=" WS "{" WS inlineBefore:inlineCode* WS elements:element WS inlineAfter:inlineCode* WS "}" {
         const tree = {
             component: name.join(''),
             type: 'component',
-            elements: [...inlineBefore, ...elements, ...inlineAfter],
+            elements: [...inlineBefore, elements, ...inlineAfter],
         }
 
          return tree

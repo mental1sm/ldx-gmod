@@ -11,7 +11,7 @@ Component TestMenu = {
         id={"root"} size={500, 700} popup
         pos={0, 0} setTitle={""} draggable={false}>            
             MAP({0,0,0,0,0}) [
-                <DLabel @counter!& key={$INDEX} pos={150 * 0.5 * $PARENT, 40} size={200, 100} sizeToContents setText={@counter.value} />
+                <DLabel @counter key={$INDEX} pos={150 * 0.5 * $PARENT, 40} size={200, 100} sizeToContents setText={@counter.value} />
             ]
             <DButton size={200, 60} pos={300, 300} setText={"Increase counter"} 
             doClick={function() 
@@ -27,6 +27,9 @@ Component TestMenu = {
                 end
             end, {counter})
             INJECT(NotableMenu)
+            IF(2 > 10) [
+                <Panel dock={FILL} size={100, 100} />
+            ]
     </DFrame>
 }
 

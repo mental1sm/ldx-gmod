@@ -1,5 +1,6 @@
 if SERVER then
     AddCSLuaFile()
+    return
 end
 
 // Move subscribers out of state to avoid access to subscribers
@@ -12,16 +13,26 @@ function useState(initialValue)
         end
         state.value = newValue
 
-        for _, callback in pairs(state.subscribers) do
-            if callback then
-                local err = not pcall(function () callback(state) end)
-                if err then state.subscribers[callback] = nil end
+        for _, subscriber in pairs(state.subscribers) do
+            local isOkay = true
+
+            if subscriber.strict and subscriber.isValid then
+                isOkay = subscriber.isValid()
+            end
+
+            if isOkay then
+                local success, err = pcall(function () subscriber.callback(state) end)
+                if not success then
+                    print('[LDX] state callback error:', err)
+                end
+            else
+                state.subscribers[_] = nil
             end
         end
     end
 
-    function state.subscribe(callback)
-        state.subscribers[callback] = callback
+    function state.subscribe(callback, strict, validCallback)
+        state.subscribers[callback] = {callback = callback, strict = strict, isValid = validCallback}
 
         return function()
             state.subscribers[callback] = nil
@@ -54,9 +65,13 @@ function useEffect(callback, dependencies)
 
         if shouldRun then
             if cleanup then
-                cleanup()
+                local success, err = pcall(cleanup)
+                if not success then
+                    print('[LDX} Cleanup error', err)
+                end
                 cleanup = nil
             end
+            
             
             local result = callback()
             if type(result) == "function" then
@@ -72,7 +87,7 @@ function useEffect(callback, dependencies)
         return cleanup
     end
 
-    for i, dep in ipairs(dependencies) do
+    for _, dep in ipairs(dependencies) do
         dep.subscribe(function()
             runEffect()
         end)
@@ -84,11 +99,29 @@ end
 
 
 
-function useReducer(reducer, initialState)
+function useReducer(reducer, initialArg, initFn)
+    local initialState = initFn and initFn(initialArg) or initialArg
     local state = useState(initialState)
 
     local function dispatch(action)
-        state.setState(reducer(state.value, action))
+        local prevState = state.value
+        local nextState
+
+        local success, result = pcall(function()
+            return reducer(prevState, action)
+        end)
+
+        if success then
+            nextState = result
+        else
+            print('[LDX] useReducer reducer error:', result)
+            return
+        end
+
+        -- shallow equality check
+        if nextState ~= prevState then
+            state.setState(nextState)
+        end
     end
 
     return state, dispatch
@@ -96,13 +129,30 @@ end
 
 
 
+
 function createStore(createStoreFn)
-    local subscribers = {}
     local state = {}
+    local subscribers = {}
 
     local function notify()
-        for _, callback in pairs(subscribers) do
-            callback(state)
+        for key, subscriber in pairs(subscribers) do
+            local isOkay = true
+
+            if subscriber.strict and subscriber.isValid then
+                isOkay = subscriber.isValid()
+            end
+
+            if isOkay then
+                local success, err = pcall(function()
+                    subscriber.callback(state)
+                end)
+
+                if not success then
+                    print("[LDX] store subscriber error:", err)
+                end
+            else
+                subscribers[key] = nil
+            end
         end
     end
 
@@ -110,10 +160,18 @@ function createStore(createStoreFn)
         if type(partialState) == "function" then
             partialState = partialState(state)
         end
+
+        local changed = false
         for k, v in pairs(partialState) do
-            state[k] = v
+            if state[k] ~= v then
+                state[k] = v
+                changed = true
+            end
         end
-        notify()
+
+        if changed then
+            notify()
+        end
     end
 
     local store = createStoreFn(set)
@@ -123,8 +181,10 @@ function createStore(createStoreFn)
             return state[k]
         end,
         __newindex = function(_, k, v)
-            state[k] = v
-            notify()
+            if state[k] ~= v then
+                state[k] = v
+                notify()
+            end
         end
     })
 
@@ -132,129 +192,200 @@ function createStore(createStoreFn)
         proxy[k] = v
     end
 
-    local function subscribe(callback)
-        local index = #subscribers + 1
-        subscribers[index] = callback
+    local function subscribe(callback, strict, isValid)
+        local key = {}
+        subscribers[key] = {
+            callback = callback,
+            strict = strict,
+            isValid = isValid
+        }
 
         return function()
-            subscribers[index] = nil
+            subscribers[key] = nil
         end
     end
 
     return proxy, subscribe
 end
 
+function useStore(store, key, panel)
+    local state = useState(store[key])
+
+    local function callback(newStore)
+        local newValue = newStore[key]
+        if newValue ~= state.value then
+            state.setState(newValue)
+        end
+    end
+
+    local unsub = nil
+    if panel then
+        unsub = store.subscribe(callback, true, function()
+            return IsValid(panel)
+        end)
+    else 
+        unsub = store.subscribe(callback)
+    end
+
+    return state, unsub
+end
+
 
 
 function useMemo(computedFn, dependencies)
     local memoizedValue = useState(nil)
-    local prevDeps = useState({})
-    local subscribers = {}
-    local unsubFunctions = {}
+    local lastDepValues = {}
 
-    local function setMemoizedValue()
-        local hasChanged = false
-        local currentDepValues = {}
+    local function updateMemo()
+        local shouldUpdate = false
+        local currentValues = {}
 
         for i, dep in ipairs(dependencies) do
-            currentDepValues[i] = dep.value
-        end
-
-        for i, depValue in ipairs(currentDepValues) do
-            if depValue ~= prevDeps.value[i] then
-                hasChanged = true
-                break
+            currentValues[i] = dep.value
+            if dep.value ~= lastDepValues[i] then
+                shouldUpdate = true
             end
         end
 
-        if hasChanged then
-            local newValue = computedFn()
-            memoizedValue.setState(newValue)
-            prevDeps.setState(currentDepValues)
-
-            for _, sub in ipairs(subscribers) do
-                sub(newValue)
+        if shouldUpdate then
+            local success, result = pcall(computedFn)
+            if success then
+                memoizedValue.setState(result)
+                for i, v in ipairs(currentValues) do
+                    lastDepValues[i] = v
+                end
+            else
+                print("[LDX] useMemo error:", result)
             end
-        end
-    end
-
-    for _, dep in ipairs(dependencies) do
-        local unsub = dep.subscribe(function()
-            setMemoizedValue()
-        end)
-        table.insert(unsubFunctions, unsub)
-    end
-
-    setMemoizedValue()
-
-    local function subscribe(callback)
-        local index = #subscribers + 1
-        subscribers[index] = callback
-
-        return function()
-            subscribers[index] = nil
-        end
-    end
-
-    return {
-        value = memoizedValue.value,
-        subscribe = subscribe
-    }
-end
-
-
-function useMemoizedCallback(callbackFn, dependencies)
-    local memoizedResult = useState(nil)
-    local prevArgs = useState({})
-    local prevDeps = useState({})
-
-    local function updateMemoized()
-        local hasDepsChanged = false
-        local currentDeps = {}
-
-        for i, dep in ipairs(dependencies) do
-            currentDeps[i] = dep.value
-        end
-
-        for i, depValue in ipairs(currentDeps) do
-            if depValue ~= prevDeps.value[i] then
-                hasDepsChanged = true
-                break
-            end
-        end
-
-        if hasDepsChanged then
-            prevDeps.setState(currentDeps)
-            memoizedResult.setState(nil)
         end
     end
 
     for _, dep in ipairs(dependencies) do
         dep.subscribe(function()
-            updateMemoized()
+            updateMemo()
         end)
     end
 
-    updateMemoized()
+    updateMemo()
+
+    return {
+        value = memoizedValue.value,
+        subscribe = function(cb, strict, validationCallback)
+            return memoizedValue.subscribe(cb, strict, validationCallback)
+        end
+    }
+end
+
+
+
+function useComputedFn(callbackFn, dependencies)
+    local lastDeps = {}
+    local lastArgs = {}
+    local cachedResult = nil
+
+    local function depsChanged()
+        for i, dep in ipairs(dependencies) do
+            if dep.value ~= lastDeps[i] then
+                return true
+            end
+        end
+        return false
+    end
+
+    for i, dep in ipairs(dependencies) do
+        lastDeps[i] = dep.value
+        dep.subscribe(function()
+            cachedResult = nil
+        end)
+    end
 
     return function(...)
         local args = {...}
-        local argsKey = table.concat(args, ":")
-
         local argsChanged = false
-        for i, arg in ipairs(args) do
-            if arg ~= prevArgs.value[i] then
+
+        for i = 1, #args do
+            if args[i] ~= lastArgs[i] then
                 argsChanged = true
                 break
             end
         end
 
-        if memoizedResult.value == nil or argsChanged then
-            local result = callbackFn(...)
-            memoizedResult.setState(result)
-            prevArgs.setState(args)
+        if cachedResult == nil or depsChanged() or argsChanged then
+            local success, result = pcall(function()
+                return callbackFn(unpack(args))
+            end)
+
+            if success then
+                cachedResult = result
+                for i = 1, #args do
+                    lastArgs[i] = args[i]
+                end
+                for i = 1, #dependencies do
+                    lastDeps[i] = dependencies[i].value
+                end
+            else
+                print("[LDX] useComputedFn error:", result)
+            end
         end
 
-        return memoizedResult.value
+        return cachedResult
     end
+end
+
+
+
+local function deepEqual(a, b, visited)
+    if a == b then return true end
+
+    if type(a) ~= type(b) then return false end
+    if type(a) ~= "table" then return false end
+
+    visited = visited or {}
+
+    if visited[a] and visited[a] == b then
+        return true
+    end
+
+    visited[a] = b
+
+    for k, v in pairs(a) do
+        if not deepEqual(v, b[k], visited) then
+            return false
+        end
+    end
+
+    for k, v in pairs(b) do
+        if a[k] == nil then
+            return false
+        end
+    end
+
+    return true
+end
+
+
+local function calculateDelta(prev, curr)
+    local stateChanged = {}
+    local deleted = {}
+    local inserted = {}
+
+    for key, value in pairs(prev) do
+        if curr[key] == nil then
+            table.insert(deleted, key)
+        elseif not deepEqual(curr[key], value) then
+            table.insert(stateChanged, key)
+        end
+    end
+
+    for key, value in pairs(curr) do
+        if prev[key] == nil then
+            table.insert(inserted, {[key] = value})
+        end
+    end
+
+    return {
+        stateChanged = stateChanged,
+        delete = deleted,
+        insert = inserted
+    }
 end
