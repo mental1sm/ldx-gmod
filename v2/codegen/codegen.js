@@ -1,5 +1,5 @@
 const fs = require('fs');
-const config = JSON.parse(fs.readFileSync('../config.json', 'utf8'));
+const config = JSON.parse(fs.readFileSync('config.json', 'utf8'));
 const mappingInheritanceMaster = require('../util/ldx-inheritance')
 const snippetGenerator = require('../codegen/snippet-generator')
 
@@ -26,7 +26,9 @@ function generateElement(element) {
 }
 
 function generateMap(map) {
-    const template = `for ${config.indexVar}, ${config.itemVar} in pairs(${map.body}) do
+    const depth = map.context.mapScope.scopeDepth
+    const mapPostfix = depth > 1 ? depth : ''
+    const template = `for ${config.indexVar}${mapPostfix}, ${config.itemVar}${mapPostfix} in pairs(${map.body}) do
         ${map.children.map(child => recursiveGenerator(child)).join('')}
     end`
     return template
@@ -42,6 +44,18 @@ function generateIf(_if) {
 function generateInject(inject) {
     const template = `${inject.code}\n`
     return template
+}
+
+function generateSnippet(snippet) {
+    if (snippet.children) {
+        const childrenCode = snippet.children.map(child => recursiveGenerator(child)).join('')
+        snippet.args.body = childrenCode
+    }
+    return snippetGenerator.generateSnippet(snippet)
+}
+
+function generateReactiveMap(rmap) {
+    return rmap.children.map(child => recursiveGenerator(child)).join('')
 }
 
 function recursiveGenerator(node) {
@@ -62,13 +76,16 @@ function recursiveGenerator(node) {
         code += generateMap(node) + '\n'
     }
     if (node.type === 'snippet') {
-        code += snippetGenerator.generateSnippet(node)
+        code += generateSnippet(node)
     }
     if (node.type === 'if') {
         code += generateIf(node) + '\n'
     }
     if (node.type === 'inject') {
         code += generateInject(node)
+    }
+    if (node.type === 'reactive_map') {
+        code += generateReactiveMap(node)
     }
     return code
 }

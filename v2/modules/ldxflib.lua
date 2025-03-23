@@ -334,7 +334,7 @@ end
 
 
 
-local function deepEqual(a, b, visited)
+function deepEqual(a, b, visited)
     if a == b then return true end
 
     if type(a) ~= type(b) then return false end
@@ -364,7 +364,7 @@ local function deepEqual(a, b, visited)
 end
 
 
-local function calculateDelta(prev, curr)
+function calculateDelta(prev, curr)
     local stateChanged = {}
     local deleted = {}
     local inserted = {}
@@ -388,4 +388,38 @@ local function calculateDelta(prev, curr)
         delete = deleted,
         insert = inserted
     }
+end
+
+
+function table.deep_copy(orig, visited)
+    visited = visited or {}
+
+    if type(orig) ~= "table" then return orig end
+    if visited[orig] then return visited[orig] end
+
+    local copy = {}
+    visited[orig] = copy
+
+    for k, v in pairs(orig) do
+        copy[table.deep_copy(k, visited)] = table.deep_copy(v, visited)
+    end
+
+    return copy
+end
+
+
+
+ function tprint (tbl, indent)
+  if not indent then indent = 0 end
+  for k, v in pairs(tbl) do
+    formatting = string.rep("  ", indent) .. k .. ": "
+    if type(v) == "table" then
+      print(formatting)
+      tprint(v, indent+1)
+    elseif type(v) == 'boolean' then
+      print(formatting .. tostring(v))      
+    else
+      print(formatting .. v)
+    end
+  end 
 end

@@ -7,6 +7,7 @@ const scanner = require('./util/scanner')
 // ----------------------------------------------------------------------
 // Preprocessing
 const preprocessor = require('./preprocessing/preprocessor')
+const preprocessorv2 = require('./preprocessing/preprocessorv2')
 const grammar = fs.readFileSync('./preprocessing/ldx.pegjs', 'utf8')
 
 // Codegen
@@ -36,7 +37,7 @@ async function parseLDX(inputFile) {
         const ldxContent = await fs.promises.readFile(inputFile, 'utf8');
         let result;
         result = parser.parse(ldxContent);
-        const preparedTree = preprocessor.preprocessingPipeline(result)
+        const preparedTree = preprocessorv2.preprocessingPipeline(result)
         const generatedCode = codegen.generateCode(preparedTree)
         const prettifiedCode = identMaster.parse(generatedCode)
 

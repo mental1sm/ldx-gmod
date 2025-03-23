@@ -1,5 +1,5 @@
 const fs = require('fs');
-const config = JSON.parse(fs.readFileSync('../config.json', 'utf8'));
+const config = JSON.parse(fs.readFileSync('config.json', 'utf8'));
 const snippetGenerator = require('../codegen/snippet-generator')
 const VAR_PREFIX = config.varPrefix;
 const ITEM_PREFIX = config.itemVar
@@ -23,6 +23,7 @@ const SNIPPETS = snippetGenerator.SNIPPETS
 
 const DEFAULT_CONTEXT = Object.freeze({
   inFor: false,
+  inReactiveMap: false,
   isRoot: false,
   isLocal: true
 })
@@ -48,10 +49,18 @@ const findRootElement = (component) => {
   return component.elements.find(element => element.type === 'element' && element.context.isRoot)
 }
 
+const replaceAliasInProps = (_props, alias, value) => {
+  Array.from(_props).forEach(props => {
+    Object.entries(props).forEach(([_, propContent]) => {
+      propContent.value ? propContent.value = propContent.value.replaceAll(alias, value) : propContent
+    })
+  })
+}
+
 function defineParent(node, parent) {
     node.parent = parent;
     let proxiedParent;
-    if (['map', 'if', 'use_effect'].includes(node.type)) proxiedParent = parent
+    if (['map', 'if', 'use_effect', 'reactive_map'].includes(node.type)) proxiedParent = parent
     else proxiedParent = node.varName
     if(node.children?.length) node.children.forEach(child => {defineParent(child, proxiedParent)})
 }
@@ -64,7 +73,7 @@ function defineVarName(node) {
     if (node.type === 'use_effect') {
         node.varName = `_eff${VAR_PREFIX}${varCounter++}`
     }
-    if (['map', 'if'].includes(node.type)) {
+    if (['map', 'if', 'reactive_map'].includes(node.type)) {
         if (node.children.length) node.children.forEach(child => {defineVarName(child)})
     }
 }
@@ -73,16 +82,12 @@ function replaceParentAlias(node) {
     if (['inline', 'inject'].includes(node.type)) {
         node.code = node.code.replaceAll(PARENT_ALIAS, node.parent)
     }
-    if (['map', 'if', 'use_effect'].includes(node.type)) {
+    if (['map', 'if', 'use_effect', 'reactive_map'].includes(node.type)) {
       node.body = node.body.replaceAll(PARENT_ALIAS, node.parent)
     }
     if (node.type === 'element') {
         // Replace also in the element props
-        Array.from([node.commonProps, node.reactiveProps, node.internalProps]).forEach(props => {
-          Object.entries(props).forEach(([_, propContent]) => {
-            propContent.value ? propContent.value = propContent.value.replaceAll(PARENT_ALIAS, node.parent) : propContent
-          })
-        })
+        replaceAliasInProps([node.commonProps, node.reactiveProps, node.internalProps], PARENT_ALIAS, node.parent)
     }
     if (node.type === 'snippet') {
       node.args = Object.entries(node.args).reduce((acc, [argName, argValue]) => {
@@ -98,23 +103,19 @@ function replaceMapAliases(node) {
     if (node.type === 'map') {
         // pass
     }
-    if (node.type === 'if' && node.context.inFor) {
+    if (node.type === 'if' && (node.context.inFor || node.context.inReactiveMap)) {
       node.body = node.body.replaceAll(MAP_INDEX_ALIAS, INDEX_PREFIX).replaceAll(MAP_ITEM_ALIAS, ITEM_PREFIX)
     }
     // Replace MAP aliases only if they inside of directive
-    if (node.type === 'element' && node.context.inFor) {
+    if (node.type === 'element' && (node.context.inFor || node.context.inReactiveMap)) {
       node.varName = node.varName.replaceAll(MAP_INDEX_ALIAS, INDEX_PREFIX).replaceAll(MAP_ITEM_ALIAS, ITEM_PREFIX)
-      Array.from([node.commonProps, node.reactiveProps, node.internalProps]).forEach(props => {
-        Object.entries(props).forEach(([_, propContent]) => {
-          propContent.value ? propContent.value = propContent.value.replaceAll(MAP_INDEX_ALIAS, INDEX_PREFIX) : propContent
-          propContent.value ? propContent.value = propContent.value.replaceAll(MAP_ITEM_ALIAS, ITEM_PREFIX) : propContent
-        })
-      })
+      replaceAliasInProps([node.commonProps, node.reactiveProps, node.internalProps], MAP_INDEX_ALIAS, INDEX_PREFIX)
+      replaceAliasInProps([node.commonProps, node.reactiveProps, node.internalProps], MAP_ITEM_ALIAS, ITEM_PREFIX)
     }
-    if (node.type === 'inline' && node.context.inFor) {
+    if (node.type === 'inline' && (node.context.inFor || node.context.inReactiveMap)) {
       node.code = node.code.replaceAll(MAP_INDEX_ALIAS, INDEX_PREFIX).replaceAll(MAP_ITEM_ALIAS, ITEM_PREFIX)
     }
-    if (node.type === 'snippet' && node.context.inFor) {
+    if (node.type === 'snippet' && (node.context.inFor || node.context.inReactiveMap)) {
       node.args = Object.entries(node.args).reduce((acc, [argName, argValue]) => {
         acc[argName] = typeof argValue === 'string' ? 
         argValue.replaceAll(MAP_INDEX_ALIAS, INDEX_PREFIX).replaceAll(MAP_ITEM_ALIAS, ITEM_PREFIX) : argValue
@@ -160,7 +161,7 @@ function groupProps(node) {
 
     // Skip map and if; then process their children
     // For reactive variables in this directives will be included REACTIVE_MAP and REACTIVE_IF directives
-    if (['map', 'if'].includes(node.type)) {
+    if (['map', 'if', 'reactive_map', 'snippet'].includes(node.type)) {
         if (node.children.length) node.children.forEach(child => {groupProps(child)})
     }
 }
@@ -187,6 +188,8 @@ function analyzeContext(node) {
  * One of the important part of context - Internal functions
  * @pushNodeToParentChildrenSectionBegin Called from SomeNode and inserts NewNode to SomeNode.ParentNode start
  * @pushNodeToParentChildrenSectionEnd Called from SomeNode and inserts NewNode to SomeNode.ParentNode end
+ * @pushNodeBeforeThisNode ...
+ * @pushNodeAfterThisNode ...
  * @wrapSelfWithNode
  * - NOT RECOMMENDED
  * - Called from SomeNode and put SomeNode inside the NewNode;
@@ -198,15 +201,33 @@ function analyzeContext(node) {
  */
 const attachInternalFunctionsToNode = (parent, child) => {
   child.context.pushNodeToParentChildrenSectionBegin = (newNode) => {
-    newNode.context = {...DEFAULT_CONTEXT, inFor: child.context.inFor}
+    newNode.context = {...DEFAULT_CONTEXT, ...child.context}
     parent.children = [newNode, ...parent.children]
+    return newNode
   }
   child.context.pushNodeToParentChildrenSectionEnd = (newNode) => {
-    newNode.context = {...DEFAULT_CONTEXT, inFor: child.context.inFor}
+    newNode.context = {...DEFAULT_CONTEXT, ...child.context}
     parent.children = [...parent.children, newNode]
+    return newNode
+  }
+  child.context.pushNodeBeforeThisNode = (newNode) => {
+    newNode.context = {...DEFAULT_CONTEXT, ...child.context}
+    const index = parent.children.indexOf(child);
+    if (index !== -1) {
+      parent.children.splice(index, 0, newNode);
+    }
+    return newNode
+  }
+  child.context.pushNodeAfterThisNode = (newNode) => {
+    newNode.context = {...DEFAULT_CONTEXT, ...child.context}
+    const index = parent.children.indexOf(child);
+    if (index !== -1) {
+      parent.children.splice(index + 1, 0, newNode);
+    }
+    return newNode
   }
   child.context.wrapSelfWithNode = (newNode) => {
-    newNode.context = {...DEFAULT_CONTEXT, inFor: child.context.inFor}
+    newNode.context = {...DEFAULT_CONTEXT, ...child.context}
     const index = parent.children.indexOf(child);
     if (index === -1) return;
 
@@ -216,15 +237,18 @@ const attachInternalFunctionsToNode = (parent, child) => {
     attachInternalFunctionsToNode(parent, newNode)
     attachInternalFunctionsToNode(newNode, nodeClone)
     newNode.children = [nodeClone]
+    return newNode
   }
   child.context.wrapSelfGroupWithNode = (newNode) => {
-    newNode.context = {...DEFAULT_CONTEXT, inFor: child.context.inFor}
-    const childrenClone = {...parent.children}
+    newNode.context = {...DEFAULT_CONTEXT, ...child.context}
+    const childrenClone = [...parent.children]
+
 
     attachInternalFunctionsToNode(parent, newNode)
     parent.children = [newNode]
     childrenClone.forEach(clone => {attachInternalFunctionsToNode(newNode, clone)})
-    newNode.children = childrenClone   
+    newNode.children = childrenClone
+    return newNode
   }
 }
 
@@ -297,26 +321,27 @@ function manageMapVariables(node) {
 
 // We need to generate unique subscription key, subscribe to dependency and then insert into the unsub storage concrete unsub functions
 function createSubscriptions(node) {
+  if (node.type === 'reactive_map') return
   if (node.type === 'element') {
       const reactiveOriginDeps = node.subscriptions
 
-    reactiveOriginDeps.map(rod => {
-      const keyProp = Object.entries(node.internalProps).find(([key, _]) => key === 'key')
+      reactiveOriginDeps.map(rod => {
+        const keyProp = Object.entries(node.internalProps).find(([key, _]) => key === 'key')
 
-      const underlayingReactiveProps = Object.fromEntries(Object.entries(node.reactiveProps).filter(([_, propContent]) => propContent.dependencies.includes(rod.name)))
+        const underlayingReactiveProps = Object.fromEntries(Object.entries(node.reactiveProps).filter(([_, propContent]) => propContent.dependencies.includes(rod.name)))
 
-      // elementName reactiveDependency reactiveProps
-      const updateFunctionName = `${UPDATE_METHOD_AFFIX}${rod.name}`
-      const updateFunctionRedefine = `${node.varName}.${updateFunctionName}`
-      const updateFunctionSnippet = makeSnippet(SNIPPETS.CREATE_UPDATE_FUNCTION, {name: updateFunctionRedefine, elementName: node.varName, elementTag: node.tag, reactiveDependency: rod.name, reactiveProps: underlayingReactiveProps})
-      node.context.pushNodeToParentChildrenSectionEnd(updateFunctionSnippet)
+        // elementName reactiveDependency reactiveProps
+        const updateFunctionName = `${UPDATE_METHOD_AFFIX}${rod.name}`
+        const updateFunctionRedefine = `${node.varName}.${updateFunctionName}`
+        const updateFunctionSnippet = makeSnippet(SNIPPETS.CREATE_UPDATE_FUNCTION, {name: updateFunctionRedefine, elementName: node.varName, elementTag: node.tag, reactiveDependency: rod.name, reactiveProps: underlayingReactiveProps})
+        node.context.pushNodeToParentChildrenSectionEnd(updateFunctionSnippet)
 
-      // uniqueName elementName reactiveDependency key?
-      const unsubscriptionName = `${UNSUBSCRIBE_ARRAY}["${UNSUBSCRIBE_AFFIX}${node.varName}_${rod.name}"${keyProp ? ` .. ${keyProp[1].value}` : '' }]`
-      const subscriptionSnippet = makeSnippet(SNIPPETS.SUBSCRIBE, 
-        {name: unsubscriptionName, elementName: node.varName, reactiveDependency: rod.name, updateCallbackName: updateFunctionName})
-      node.context.pushNodeToParentChildrenSectionEnd(subscriptionSnippet)
-    })
+        // uniqueName elementName reactiveDependency key?
+        const unsubscriptionName = `${UNSUBSCRIBE_ARRAY}["${UNSUBSCRIBE_AFFIX}${node.varName}_${rod.name}"${keyProp ? ` .. ${keyProp[1].value}` : '' }]`
+        const subscriptionSnippet = makeSnippet(SNIPPETS.SUBSCRIBE, 
+          {name: unsubscriptionName, elementName: node.varName, reactiveDependency: rod.name, updateCallbackName: updateFunctionName})
+        node.context.pushNodeToParentChildrenSectionEnd(subscriptionSnippet)
+      })
   }
   if (node.children) node.children.forEach(child => {createSubscriptions(child)})
 }
@@ -344,6 +369,80 @@ function handleUseEffects(node) {
   }
   if (node.children) node.children.forEach(child => {handleUseEffects(child)})
 }
+
+//----------- REACTIVE MAP ------------------------------------------
+function buildReactiveMaps(node) {
+  if (node.type === 'reactive_map') {
+    const mapStoreName = `REACTIVE_MAP_STORE_${varCounter++}`
+    const mapStore = makeSnippet(SNIPPETS.CREATE_EMPTY_TABLE, {name: mapStoreName, isLocal: true})
+    mapStore.context = {...DEFAULT_CONTEXT}
+
+    const renderFunctionName = `_render_${varCounter++}`
+    const renderFunction = makeSnippet(SNIPPETS.CREATE_FUNCTION, {name: renderFunctionName, args: "$INDEX, $ITEM"})
+    const someMapChild = node.children[0]
+
+    if (someMapChild) {
+      someMapChild.context.wrapSelfGroupWithNode(renderFunction)
+      node.children = [mapStore, renderFunction]
+
+      applyRecursivly(node, el => {
+        el.context = {
+          ...el.context,
+          inReactiveMap: true,
+          reactiveMapActualStore: mapStoreName,
+          reactiveMapDependency: node.body.replace('@', '')
+        }
+      })
+    }
+  }
+  if (node.children) node.children.forEach(child => buildReactiveMaps(child))
+}
+
+function replaceReactiveMapAliasesInProps(node) {
+  if (node.type === 'element' && node.context.inReactiveMap) {
+    replaceAliasInProps([node.reactiveProps], MAP_ITEM_ALIAS, `${node.context.reactiveMapDependency}[${INDEX_PREFIX}]`)
+  }
+  if (node.children) node.children.forEach(child => replaceReactiveMapAliasesInProps(child))
+}
+
+function generateUpdateFunctionForReactiveMaps(node) {
+  if (node.type === 'element' && node.context.inReactiveMap) {
+    node.subscriptions.forEach(rod => {
+      if (rod.name === node.context.reactiveMapDependency && node.reactiveProps) {
+        Object.values(node.reactiveProps).forEach(val => {
+          if (val.value?.includes(INDEX_PREFIX)) {
+            val.dependencies = [rod.name];
+          }
+        });
+      }
+
+      const underlayingReactiveProps = Object.fromEntries(
+        Object.entries(node.reactiveProps || {}).filter(([_, prop]) => prop.dependencies?.includes(rod.name))
+      )
+
+      const updateFunctionSnippet = makeSnippet(SNIPPETS.CREATE_UPDATE_FUNCTION, {
+        name: `${node.varName}.${UPDATE_METHOD_AFFIX}${rod.name}`,
+        elementName: node.varName,
+        elementTag: node.tag,
+        reactiveDependency: rod.name,
+        reactiveProps: underlayingReactiveProps
+      })
+
+      updateFunctionSnippet.context = {...DEFAULT_CONTEXT, inReactiveMap: true}
+      node.context.pushNodeToParentChildrenSectionEnd(updateFunctionSnippet)
+    })
+  }
+  if (node.children) node.children.forEach(generateUpdateFunctionForReactiveMaps)
+}
+
+function manageReactiveMapVariables(node) {
+  if (node.type === 'element' && node.context.inReactiveMap) {
+    node.varName = `${node.context.reactiveMapActualStore}[$INDEX]`
+    node.context.isLocal = false
+  }
+  if (node.children) node.children.forEach(child => {manageReactiveMapVariables(child)})
+}
+//-------------------------------------------------------------------
 
 function preprocessingPipeline(tree) {
     // ------------ EARLY STAGE -------------------------------------
@@ -393,7 +492,7 @@ function preprocessingPipeline(tree) {
       }
     })
 
-    // Create table to store iterable elements inside of mab
+    // Create table to store iterable elements inside of map
     tree.forEach(rootNode => {
       if (rootNode.type === 'component') {
         rootNode.elements.forEach(element => manageMapVariables(element))
@@ -401,6 +500,15 @@ function preprocessingPipeline(tree) {
     })
 
     // ---------- LATE STAGE ----------------
+    tree.forEach(rootNode => {
+      if (rootNode.type === 'component') {
+        rootNode.elements.forEach(element => {buildReactiveMaps(element)})
+        rootNode.elements.forEach(element => {manageReactiveMapVariables(element)})
+        rootNode.elements.forEach(element => {replaceReactiveMapAliasesInProps(element)})
+        rootNode.elements.forEach(element => {generateUpdateFunctionForReactiveMaps(element)})
+      }
+    })
+
     // Generates useEffect snippets at the end of component and call it
     tree.forEach(rootNode => {
       if (rootNode.type === 'component') {
@@ -421,6 +529,7 @@ function preprocessingPipeline(tree) {
       }
     })
 
+    console.dir(tree, { depth: null });
 
     // Replace aliases
     tree.forEach(rootNode => {
@@ -430,7 +539,7 @@ function preprocessingPipeline(tree) {
       }
     })
 
-    console.dir(tree, { depth: null });
+    //console.dir(tree, { depth: null });
     return tree
 }
 

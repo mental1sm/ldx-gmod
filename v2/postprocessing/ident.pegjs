@@ -40,7 +40,7 @@
     });
 
     // Исправление: Учитываем случай, когда function и end в одной строке
-    if (line.includes('function') && line.includes('end')) {
+    if (line.includes('function') && line.includes(' end')) {
       increaseCount--;
       decreaseCount--;
     }

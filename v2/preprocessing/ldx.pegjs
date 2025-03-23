@@ -33,7 +33,7 @@ externalCode
     = "{" WS content:nestedCurly WS "}" { return content; }
 
 element 
-    = "<" tag:tagName subscriptions:subscription* props:prop* WS ">" WS children:(WS (element / inject / inlineCode / ifBlock / mapBlock / useEffectBlock))* WS "</" tagName ">"
+    = "<" tag:tagName subscriptions:subscription* props:prop* WS ">" WS children:(WS (element / inject / inlineCode / ifBlock / reactiveMapBlock / mapBlock / useEffectBlock))* WS "</" tagName ">"
     { 
         return { 
             tag: tag,
@@ -47,6 +47,7 @@ element
     { return { tag: tag, type: 'element', props: Object.fromEntries(props), children: [], subscriptions: subscriptions }; }
     / inlineCode
     / ifBlock
+    / reactiveMapBlock
     / mapBlock
     / useEffectBlock
 
@@ -117,6 +118,21 @@ mapBlock
             children: elements.map(e => e[0]) 
         };
     }
+
+reactiveMapBlock
+  = "REACTIVE_MAP(" iterable:[^)]+ modeOpt:reactiveMapMode? ")" WS "[" WS elements:(element WS)* WS "]" {
+      return { 
+          type: "reactive_map", 
+          mode: modeOpt !== null ? modeOpt : 'LAZY',
+          body: iterable.join(''), 
+          children: elements.map(e => e[0]) 
+      };
+  }
+
+reactiveMapMode
+  = WS "," WS modeChar:[a-zA-Z] { return modeChar; }
+
+
 
 useEffectBlock
     = "USE_EFFECT(" WS body:luaCode WS "," WS deps:dependencyList WS ")" 

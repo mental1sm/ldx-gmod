@@ -1,7 +1,7 @@
 const mappingInheritanceMaster = require('../util/ldx-inheritance')
 
 const SNIPPETS = Object.freeze({
-    CREATE_FUNCTION: "CREATE_FUNCTION", // name args
+    CREATE_FUNCTION: "CREATE_FUNCTION", // name args children
     END_SOMESTING: "END_SOMETHING",
     CREATE_VARIABLE: "CREATE_VARIABLE", // isLocal? name value
     CREATE_EMPTY_TABLE: "CREATE_EMPTY_TABLE", // isLocal? name
@@ -12,72 +12,72 @@ const SNIPPETS = Object.freeze({
     CALL_FUNCTION: "CALL_FUNCTION", // name args
     REDEFINE_PROPERTY: "REDEFINE_PROPERTY", // class property value,
     ADD_ITEM_TO_TABLE: "ADD_ITEM_TO_TABLE", // table key valueб
-    USE_EFFECT: "USE_EFFECT" // name body deps
+    USE_EFFECT: "USE_EFFECT", // name body deps
   })
 
-const generateCreateFunction = (args) => {
-    return `local ${args.name} = function(${args.args})\n`
-}
-
-const generateEndSomething = (args) => {
-    return `end\n`
-}
-
-const generateCreateVariable = (args) => {
-    return args.isLocaL ? `local ${args.name} = ${args.value}\n` : `${args.name} = ${args.value}\n`
-}
-
-const generateCreateEmptyTable = (args) => {
-    return args.isLocaL ? `local ${args.name} = {}` : `${args.name} = {}\n`
-}
-
-const generateCreateUpdateFunction = (args) => {
-    console.log(args)
-    return `${args.name} = function(${args.reactiveDependency})
-        ${mappingInheritanceMaster.generateProps(args.elementName, args.elementTag, args.reactiveProps).join('\n')} 
+const generateCreateFunction = (s) => {
+    return `local ${s.args.name} = function(${s.args.args})
+        ${s.args.body ? s.args.body : ''}
     end\n`
 }
 
-const generateCreateSubscribe = (args) => {
-    console.log(args)
-    return `${args.name} = ${args.reactiveDependency}.subscribe(function(state)
-        ${args.elementName}:${args.updateCallbackName}(state)
+const generateEndSomething = (s) => {
+    return `end\n`
+}
+
+const generateCreateVariable = (s) => {
+    return s.args.isLocal ? `local ${s.args.name} = ${s.args.value}\n` : `${s.args.name} = ${s.args.value}\n`
+}
+
+const generateCreateEmptyTable = (s) => {
+    return s.args.isLocal ? `local ${s.args.name} = {}\n` : `${s.args.name} = {}\n`
+}
+
+const generateCreateUpdateFunction = (s) => {
+    return `${s.args.name} = function(${s.args.reactiveDependency})
+        ${mappingInheritanceMaster.generateProps(s.args.elementName, s.args.elementTag, s.args.reactiveProps).join('\n')} 
+    end\n`
+}
+
+const generateCreateSubscribe = (s) => {
+    return `${s.args.name} = ${s.args.reactiveDependency}.subscribe(function(state)
+        ${s.args.elementName}:${s.args.updateCallbackName}(state)
     end, true, 
     function() 
-        return IsValid(${args.elementName}) 
+        return IsValid(${s.args.elementName}) 
     end)\n`
 }
 
-const generateCReateOnRemoveUnsubHandler = (args) => {
-    return `${args.elementName}.OnRemove = function(self)
-        ${Object.values(args.children).map(child => generateSnippet(child))}
-        for _, _u in pairs(${args.unsubscribeName}) do
+const generateCReateOnRemoveUnsubHandler = (s) => {
+    return `${s.args.elementName}.OnRemove = function(self)
+        ${Object.values(s.args.children).map(child => generateSnippet(child))}
+        for _, _u in pairs(${s.args.unsubscribeName}) do
             _u()
         end
-        ${args.customization}
+        ${s.args.customization}
     end`
 }
 
-const generateCallClassMethod = (args) => {
-    const joinedArgs = args.args ? args.args.join(', ') : ''
-    return `${args.class}:${args.name}(${joinedArgs})\n`
+const generateCallClassMethod = (s) => {
+    const joinedArgs = s.args.args ? s.args.args.join(', ') : ''
+    return `${s.args.class}:${s.args.name}(${joinedArgs})\n`
 }
 
-const generateCallFunction = (args) => {
-    const joinedArgs = args.args ? args.args.join(', ') : ''
-    return `${args.name}(${joinedArgs})\n`
+const generateCallFunction = (s) => {
+    const joinedArgs = s.args.args ? s.args.args.join(', ') : ''
+    return `${s.args.name}(${joinedArgs})\n`
 }
 
-const generateRedefineProperty = (args) => {
-    return `${args.class}.${args.property} = ${args.value}\n`
+const generateRedefineProperty = (s) => {
+    return `${s.args.class}.${s.args.property} = ${s.args.value}\n`
 }
 
-const generateAddItemToTable = (args) => {
-    return `${args.table}[${args.key}] = ${args.value}\n`
+const generateAddItemToTable = (s) => {
+    return `${s.args.table}[${s.args.key}] = ${s.args.value}\n`
 }
 
-const generateUseEffect = (args) => {
-    return `local ${args.name} = useEffect(${args.body}, {${args.deps}})()\n`
+const generateUseEffect = (s) => {
+    return `local ${s.args.name} = useEffect(${s.args.body}, {${s.args.deps}})()\n`
 }
 
 
@@ -98,7 +98,7 @@ const snippetMappings = {
 
 const generateSnippet = (snippet) => {
     const snippetExecutor = snippetMappings[snippet.variant]
-    return snippetExecutor ? snippetExecutor(snippet.args) : ''
+    return snippetExecutor ? snippetExecutor(snippet) : ''
 }
 
 
