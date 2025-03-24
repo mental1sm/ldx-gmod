@@ -32,5 +32,6 @@ VAR_PREFIX: config.varPrefix,
   SNIPPETS: snippetGenerator.SNIPPETS,
   varCounter: varCounter,
   INTERNAL_PROPS: ["nolocal", "key", "id"],
-  DEFAULT_CONTEXT: DEFAULT_CONTEXT
+  DEFAULT_CONTEXT: DEFAULT_CONTEXT,
+  LDX_UPDATE_HANDLER: 'ldxUpdateHandler'
 }

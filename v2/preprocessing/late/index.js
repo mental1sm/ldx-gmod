@@ -27,7 +27,7 @@ const executeLateStage = (tree) => {
 
     UTIL.applyHandlerToNodes(tree, UTIL.context.analyzeContext)
 
-    console.dir(tree, { depth: null });
+    //console.dir(tree, { depth: null });
 
     // Replace aliases
     UTIL.applyHandlerToNodes(tree, LATE.REPLACE_PARENT_ALIAS)

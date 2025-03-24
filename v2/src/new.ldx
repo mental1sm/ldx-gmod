@@ -13,8 +13,8 @@ Component TestMenu = {
     <DFrame
         id={"root"} size={500, 700} popup
         pos={0, 0} setTitle={""} draggable={false}>            
-            REACTIVE_MAP(@rows) [
-                <DButton @rows setText={@$ITEM.name} />
+            REACTIVE_MAP(@users) [
+                <DButton @users setText={@$ITEM.name} />
             ]
 
             PLUGIN(com.mentalism.ldx.someplugin) [

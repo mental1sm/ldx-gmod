@@ -11,9 +11,11 @@ const SNIPPETS = Object.freeze({
     CALL_CLASS_METHOD: "CALL_CLASS_METHOD", // class name args
     CALL_FUNCTION: "CALL_FUNCTION", // name args
     REDEFINE_PROPERTY: "REDEFINE_PROPERTY", // class property value,
-    ADD_ITEM_TO_TABLE: "ADD_ITEM_TO_TABLE", // table key valueб
+    ADD_ITEM_TO_TABLE: "ADD_ITEM_TO_TABLE", // table key value
     USE_EFFECT: "USE_EFFECT", // name body deps
-    CREATE_FOR: "CREATE_FOR" // iterable indexName itemName children
+    CREATE_FOR: "CREATE_FOR", // iterable indexName itemName children
+    SUBSCRIBE_FN_ONLY: "SUBSCRIBE_FN_ONLY" // name reactiveDependency func args validator
+    
   })
 
 const generateCreateFunction = (s) => {
@@ -35,8 +37,11 @@ const generateCreateEmptyTable = (s) => {
 }
 
 const generateCreateUpdateFunction = (s) => {
+    console.dir(s, { depth: null });
+
     return `${s.args.name} = function(${s.args.reactiveDependency})
-        ${mappingInheritanceMaster.generateProps(s.args.elementName, s.args.elementTag, s.args.reactiveProps).join('\n')} 
+        ${mappingInheritanceMaster.generateProps(s.args.elementName, s.args.elementTag, s.args.reactiveProps).join('\n')}
+        ${s.args.body} 
     end\n`
 }
 
@@ -46,6 +51,15 @@ const generateCreateSubscribe = (s) => {
     end, true, 
     function() 
         return IsValid(${s.args.elementName}) 
+    end)\n`
+}
+
+const generateSubscriptionWithFunctionOnly = (s) => {
+    return `${s.args.name} = ${s.args.reactiveDependency}.subscribe(function(state)
+        ${s.args.func}(${s.args.args.join(', ')})
+    end, true,
+    function()
+        return IsValid(${s.args.validator})
     end)\n`
 }
 
@@ -76,6 +90,10 @@ const generateAddItemToTable = (s) => {
     return `${s.args.table}[${s.args.key}] = ${s.args.value}\n`
 }
 
+const generateAddItemCopyToTable = (s) => {
+    return `${s.args.table}[${s.args.key}] = table.deep_copy(${s.args.value})\n`
+}
+
 const generateUseEffect = (s) => {
     return `local ${s.args.name} = useEffect(${s.args.body}, {${s.args.deps}})()\n`
 }
@@ -100,7 +118,8 @@ const snippetMappings = {
     REDEFINE_PROPERTY: generateRedefineProperty,
     ADD_ITEM_TO_TABLE: generateAddItemToTable,
     USE_EFFECT: generateUseEffect,
-    CREATE_FOR: generateFor
+    CREATE_FOR: generateFor,
+    SUBSCRIBE_FN_ONLY: generateSubscriptionWithFunctionOnly
 }
 
 const generateSnippet = (snippet) => {

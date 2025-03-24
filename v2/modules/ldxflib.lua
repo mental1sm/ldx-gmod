@@ -423,3 +423,38 @@ end
     end
   end 
 end
+
+
+function ldxRerender(state, store, render)
+    for _, element in pairs(__mvs__2) do
+        if IsValid(element) and type(element.Remove) == "function" then
+            element:Remove()
+        end
+    end
+    
+    for k in pairs(store) do
+        store[k] = nil
+      end
+      
+    for index, item in pairs(state.value) do
+        render(index, item)
+    end
+    store["INTERNAL_LAST_VALUE"] = table.deep_copy(state.value)
+end
+
+function ldxUpdateHandler(state, store, render)
+    local delta = calculateDelta(__mvs__2["INTERNAL_LAST_VALUE"], state.value)
+
+    if #delta.delete > 0 or #delta.insert > 0 then
+        ldxRerender(state, store, render)
+        return
+    end
+
+    for _, index in ipairs(delta.stateChanged) do
+        if store[index] and store[index].__update__ then
+            store[index]:__update__(state)
+        end
+    end
+
+    store["INTERNAL_LAST_VALUE"] = table.deep_copy(state.value)
+end
