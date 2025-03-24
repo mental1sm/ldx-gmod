@@ -53,6 +53,7 @@ function replaceMapAliases(node) {
           acc[argName] = scoped(argValue)
           return acc
       }, {})
+      console.log(node)
   }
 
   if (node.children) node.children.forEach(child => replaceMapAliases(child))

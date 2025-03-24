@@ -13,6 +13,7 @@ const SNIPPETS = Object.freeze({
     REDEFINE_PROPERTY: "REDEFINE_PROPERTY", // class property value,
     ADD_ITEM_TO_TABLE: "ADD_ITEM_TO_TABLE", // table key valueб
     USE_EFFECT: "USE_EFFECT", // name body deps
+    CREATE_FOR: "CREATE_FOR" // iterable indexName itemName children
   })
 
 const generateCreateFunction = (s) => {
@@ -64,8 +65,7 @@ const generateCallClassMethod = (s) => {
 }
 
 const generateCallFunction = (s) => {
-    const joinedArgs = s.args.args ? s.args.args.join(', ') : ''
-    return `${s.args.name}(${joinedArgs})\n`
+    return `${s.args.name}(${s.args.args})\n`
 }
 
 const generateRedefineProperty = (s) => {
@@ -78,6 +78,12 @@ const generateAddItemToTable = (s) => {
 
 const generateUseEffect = (s) => {
     return `local ${s.args.name} = useEffect(${s.args.body}, {${s.args.deps}})()\n`
+}
+
+const generateFor = (s) => {
+    return `for ${s.args.indexName}, ${s.args.itemName} in pairs(${s.args.iterable}) do
+        ${s.args.body}
+    end\n`
 }
 
 
@@ -93,7 +99,8 @@ const snippetMappings = {
     CALL_FUNCTION: generateCallFunction,
     REDEFINE_PROPERTY: generateRedefineProperty,
     ADD_ITEM_TO_TABLE: generateAddItemToTable,
-    USE_EFFECT: generateUseEffect
+    USE_EFFECT: generateUseEffect,
+    CREATE_FOR: generateFor
 }
 
 const generateSnippet = (snippet) => {

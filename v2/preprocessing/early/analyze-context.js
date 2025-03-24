@@ -7,14 +7,14 @@ function analyzeContext(node) {
     if (node.type === 'map') {
       if (node.children && node.children.length) {
         node.children.forEach(child => {
-          child.context = {...child.context, inFor: true}
+          child.context = {...child.context}
           analyzeContext(child)
         })
       }
     }
     if (node.type === 'element' && node.children && node.children.length) {
       node.children.forEach(child => {
-        child.context = {...child.context, inFor: node.context.inFor}
+        child.context = {...child.context}
         analyzeContext(child)
       })
     } 

@@ -14,7 +14,15 @@ function buildReactiveMaps(node) {
   
       if (someMapChild) {
         someMapChild.context.wrapSelfGroupWithNode(renderFunction)
-        node.children = [mapStore, renderFunction]
+
+        const iteratorSnippet = UTIL.makeSnippet(
+          G.SNIPPETS.CREATE_FOR, {indexName: G.MAP_INDEX_ALIAS, itemName: G.MAP_ITEM_ALIAS, iterable: node.body.replace('@', '') + ".value"})
+        const callRender = UTIL.makeSnippet(G.SNIPPETS.CALL_FUNCTION, {name: renderFunctionName, args: `${G.MAP_INDEX_ALIAS}, ${G.MAP_ITEM_ALIAS}`})
+        iteratorSnippet.context = {...G.DEFAULT_CONTEXT, mapScope: node.context.mapScope}
+        callRender.context = {...G.DEFAULT_CONTEXT, mapScope: node.context.mapScope}
+        iteratorSnippet.children = [callRender]
+
+        node.children = [mapStore, renderFunction, iteratorSnippet]
       
         UTIL.applyRecursivly(node, el => {
           el.context = {
@@ -35,11 +43,7 @@ function buildReactiveMaps(node) {
     if (node.type === 'element' && node.context.mapScope.inMap && node.context.mapScope.isReactive) {
       Object.entries(node.reactiveProps).forEach(([key, propContent]) => {
         const scope = node.context.mapScope
-        const filteredStores = Object.entries(scope.mapStores).filter(([key, val]) => val.depth === scope.scopeDepth).map(([key, val]) => val)
-        const store = filteredStores.length ? filteredStores[0] : null
-        if (!store) {
-          throw new MapStoreError(`[REACTIVE_MAP] mapStore on depth ${scope.scopeDepth} was not found!`);
-        }
+        const store = UTIL.findCurrentMapStore(node)
         propContent.value = propContent.value.replaceAll('$ITEM', `${store.dependency}[$INDEX${scope.scopeDepth}]`)
         propContent.dependencies.push(store.dependency)
       });
@@ -51,16 +55,6 @@ function buildReactiveMaps(node) {
     if (node.type === 'element' && node.context.mapScope.inMap) {
       const mapStore = UTIL.findCurrentMapStore(node)
       node.subscriptions.forEach(rod => {
-        // if (rod.name === node.context.reactiveMapDependency && node.reactiveProps) {
-        //   Object.values(node.reactiveProps).forEach(val => {
-        //     if (val.value?.includes(G.INDEX_PREFIX)) {
-        //       val.dependencies = [rod.name];
-        //     }
-        //   });
-        // }
-
-        console.log(node.context.mapScope)
-
         Object.values(node.reactiveProps).forEach(val => {
           if (val.dependencies.includes('$ITEM')) {
             val.dependencies = [mapStore.dependency];
@@ -70,10 +64,6 @@ function buildReactiveMaps(node) {
         const underlayingReactiveProps = Object.fromEntries(
           Object.entries(node.reactiveProps || {}).filter(([_, prop]) => prop.dependencies?.includes(rod.name))
         )
-        
-        console.log(rod)
-        console.log(node.reactiveProps)
-        console.log(underlayingReactiveProps)
 
         const updateFunctionSnippet = UTIL.makeSnippet(G.SNIPPETS.CREATE_UPDATE_FUNCTION, {
           name: `${node.varName}.${G.UPDATE_METHOD_AFFIX}${rod.name}`,
@@ -92,9 +82,7 @@ function buildReactiveMaps(node) {
   
   function manageReactiveMapVariables(node) {
     if (node.type === 'element' && node.context.mapScope.inMap) {
-      const scope = node.context.mapScope
-      const filteredStores = Object.entries(scope.mapStores).filter(([key, val]) => val.depth === scope.scopeDepth).map(([key, val]) => val)
-      const store = filteredStores.length ? filteredStores[0] : 'DEPTH_ERROR'
+      const store = UTIL.findCurrentMapStore(node)
       node.varName = `${store.mapStore}[$INDEX]`
       node.context.isLocal = false
     }

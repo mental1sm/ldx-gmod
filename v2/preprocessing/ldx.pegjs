@@ -33,7 +33,7 @@ externalCode
     = "{" WS content:nestedCurly WS "}" { return content; }
 
 element 
-    = "<" tag:tagName subscriptions:subscription* props:prop* WS ">" WS children:(WS (element / inject / inlineCode / ifBlock / reactiveMapBlock / mapBlock / useEffectBlock))* WS "</" tagName ">"
+    = "<" tag:tagName subscriptions:subscription* props:prop* WS ">" WS children:(WS (element / inject / inlineCode / ifBlock / reactiveMapBlock / mapBlock / useEffectBlock / customPluginBlock))* WS "</" tagName ">"
     { 
         return { 
             tag: tag,
@@ -50,6 +50,7 @@ element
     / reactiveMapBlock
     / mapBlock
     / useEffectBlock
+    / customPluginBlock
 
 subscription
     = WS "@" name:[a-zA-Z0-9.]+ meta:([!&]*)? subscriptionBlock:subscriptionBlock?
@@ -131,6 +132,25 @@ reactiveMapBlock
 
 reactiveMapMode
   = WS "," WS modeChar:[a-zA-Z] { return modeChar; }
+
+
+customPluginBlock
+    = "PLUGIN(" pluginName:[a-zA-Z.]+ args:customPluginArgs WS ")" WS "[" WS elements:(element WS)* WS "]" {
+        return {
+            type: "plugin",
+            name: pluginName.join(''),
+            args: args,
+            children: elements.map(e => e[0]) 
+        }
+    }
+
+customPluginArgs
+  = WS head:pluginArg tail:("," WS pluginArg)* {
+      return [head, ...tail.map(t => t[2])];
+    }
+  / WS { return []; }
+
+pluginArg = chars:[a-zA-Z0-9.@$#]+ { return chars.join(''); }
 
 
 

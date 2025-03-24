@@ -20,14 +20,14 @@ const executeLateStage = (tree) => {
     UTIL.applyHandlerDirectly(tree, LATE.HANDLE_UNSUBSCRIPTION)
 
     // Injects useEffect cleanup callbacks to root:OnRemove
-    UTIL.applyHandlerToNodes(tree, LATE.INJECT_USE_EFFECT_UNSUBS)
+    UTIL.applyHandlerToRoot(tree, LATE.INJECT_USE_EFFECT_UNSUBS)
 
     // Create subscriptions for reactive variables
     UTIL.applyHandlerToNodes(tree, LATE.CREATE_SUBSCRIPTION)
 
     UTIL.applyHandlerToNodes(tree, UTIL.context.analyzeContext)
 
-    //console.dir(tree, { depth: null });
+    console.dir(tree, { depth: null });
 
     // Replace aliases
     UTIL.applyHandlerToNodes(tree, LATE.REPLACE_PARENT_ALIAS)

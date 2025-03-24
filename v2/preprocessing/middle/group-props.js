@@ -35,7 +35,7 @@ function groupProps(node) {
 
     // Skip map and if; then process their children
     // For reactive variables in this directives will be included REACTIVE_MAP and REACTIVE_IF directives
-    if (['map', 'if', 'reactive_map', 'snippet'].includes(node.type)) {
+    if (['map', 'if', 'reactive_map', 'snippet', 'plugin'].includes(node.type)) {
         if (node.children.length) node.children.forEach(child => {groupProps(child)})
     }
 }

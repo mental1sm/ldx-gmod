@@ -4,8 +4,6 @@ const snippetGenerator = require('../codegen/snippet-generator')
 const varCounter = 0
 
 const DEFAULT_CONTEXT = Object.freeze({
-  inFor: false,
-  inReactiveMap: false,
   isRoot: false,
   isLocal: true,
   mapScope: {

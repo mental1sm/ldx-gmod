@@ -1,8 +1,9 @@
 const G = require('../global')
+const UTIL = require('../p-util')
 // Injects all effect cleanups into the root:OnRemove method
 function injectEffectUnsubs(node) {
     if (node.type === 'component') {
-      const root = findRootElement(node)
+      const root = UTIL.findRootElement(node)
       const rootEffects = root.children.filter(n => n.type === 'use_effect')
       const unmountSnippets = node.elements.filter(n => n.type === 'snippet' 
         && n.variant === G.SNIPPETS.CREATE_ON_REMOVE_UNSUBSCRIBE_HANDLER && n.args.elementName === root.varName)
@@ -10,7 +11,7 @@ function injectEffectUnsubs(node) {
         const rootUnmountSnippet = unmountSnippets[0]
         rootUnmountSnippet.args.children = [
           ...rootUnmountSnippet.args.children, 
-          ...rootEffects.map(effect => G.makeSnippet(G.SNIPPETS.CALL_FUNCTION, {name: effect.varName}))
+          ...rootEffects.map(effect => UTIL.makeSnippet(G.SNIPPETS.CALL_FUNCTION, {name: effect.varName}))
         ]
       }
     }

@@ -17,6 +17,9 @@ Component TestMenu = {
                 <DButton @rows setText={@$ITEM.name} />
             ]
 
+            PLUGIN(com.mentalism.ldx.someplugin) [
+                <DButton setText={"Проверка"} />
+            ]
     </DFrame>
 }
 {
