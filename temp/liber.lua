@@ -39,7 +39,7 @@ LiberDom = {
     end
   end
   
-  function LiberDom:addNode(class, props)
+  function LiberDom:addNode(id, parentId, class, props)
     self.idCounter = self.idCounter + 1
     local id = self.idCounter
   
@@ -77,25 +77,39 @@ LiberDom = {
 
 
 function CreateMenu()
+    local DOM = LiberDom.init()
     local counter = useState(0)
+    DOM.pushState("counter", counter)
 
-    local frameId = LiberDom:addNode("DFrame", {
-    size = {300, 100},
-    pos = {200, 200},
-    title = "Тестовая форма"
+    DOM:addNode("node1", nil, function (parent)
+      local _ = vgui.Create("DFrame", nil)
+      _:SetSize(500, 700)
+      _:MakePopup()
+      _:SetPos(0, 0)
+      _:SetTitle("")
+      _:SetDraggable(false)
+    end, {})
+
+    DOM:addNode("node2", "node1", function (parent)
+      local _ = vgui.Create("DLabel", parent)
+      _:Dock(FILL)
+      _:SetPos(100, 200)
+    end, {
+      {fn = "SetText", fnType = "classMethod", args = function (counter) return "Счетчик: " .. counter.value end, dep = "counter"}
     })
 
-    LiberDom:addNode("DLabel", {
-    parent = frameId,
-    pos = {20, 40},
-    text = function()
-        return "Счётчик: " .. counter:get()
-    end
-    })
+    DOM:render()
+    DOM:lock()
+
+    local counterRef = DOM:getState("counter")
+    local rootNode = DOM:findNode("node1")
 
     timer.Create("Bump", 1, 10, function()
     counter:set(counter:get() + 1)
     end)
+
+    {fn = "SetText", fnType = "classMethod", args = function (text1) return "Текст: " .. text1.value .. text2.value end, dep = "text1"},
+    {fn = "SetText", fnType = "classMethod", args = function (text2) return "Текст: " .. text1.value .. text2.value end, dep = "text2"}
 end
 
 concommand.Add("open_ui4", function()

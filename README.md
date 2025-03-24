@@ -1,0 +1,36 @@
+## License
+
+LDX is licensed under the ISC License — see the [LICENSE](./LICENSE) file for details.
+
+
+```jsx
+{
+include('ldxflib.lua')
+if SERVER then 
+    AddCSLuaFile() 
+end
+}
+
+Component TestMenu = { 
+    {
+        local counter = useState(0)
+        local users = useState({})
+    }
+    <DFrame
+        id={"root"} size={500, 700} popup
+        pos={0, 0} setTitle={""} draggable={false}>            
+            REACTIVE_MAP(@rows) [
+                <DButton @rows setText={@$ITEM.name} />
+            ]
+
+            PLUGIN(com.mentalism.ldx.someplugin) [
+                <DButton setText={"Проверка"} />
+            ]
+    </DFrame>
+}
+{
+    concommand.Add("open_ui3", function()
+        TestMenu()
+    end)
+}
+```
